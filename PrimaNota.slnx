@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PrimaNota.Application/PrimaNota.Application.csproj" />
+    <Project Path="src/PrimaNota.Domain/PrimaNota.Domain.csproj" />
+    <Project Path="src/PrimaNota.Infrastructure/PrimaNota.Infrastructure.csproj" />
+    <Project Path="src/PrimaNota.Shared/PrimaNota.Shared.csproj" />
+    <Project Path="src/PrimaNota.Web/PrimaNota.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PrimaNota.ComponentTests/PrimaNota.ComponentTests.csproj" />
+    <Project Path="tests/PrimaNota.E2ETests/PrimaNota.E2ETests.csproj" />
+    <Project Path="tests/PrimaNota.IntegrationTests/PrimaNota.IntegrationTests.csproj" />
+    <Project Path="tests/PrimaNota.UnitTests/PrimaNota.UnitTests.csproj" />
+  </Folder>
+</Solution>

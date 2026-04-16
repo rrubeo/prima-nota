@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DotNetAnalyzers/StyleCopAnalyzers/master/StyleCop.Analyzers/StyleCop.Analyzers/Settings/stylecop.schema.json",
+  "settings": {
+    "documentationRules": {
+      "companyName": "Prima Nota Aziendale",
+      "documentInterfaces": false,
+      "documentPrivateElements": false,
+      "documentInternalElements": false,
+      "documentExposedElements": true,
+      "xmlHeader": false
+    },
+    "orderingRules": {
+      "usingDirectivesPlacement": "outsideNamespace",
+      "systemUsingDirectivesFirst": true
+    },
+    "layoutRules": {
+      "newlineAtEndOfFile": "require"
+    },
+    "namingRules": {
+      "allowedHungarianPrefixes": [],
+      "allowCommonHungarianPrefixes": true
+    }
+  }
+}

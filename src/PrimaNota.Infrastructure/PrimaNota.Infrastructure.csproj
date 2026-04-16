@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\PrimaNota.Application\PrimaNota.Application.csproj" />
+    <ProjectReference Include="..\PrimaNota.Domain\PrimaNota.Domain.csproj" />
+    <ProjectReference Include="..\PrimaNota.Shared\PrimaNota.Shared.csproj" />
+  </ItemGroup>
+
+</Project>
