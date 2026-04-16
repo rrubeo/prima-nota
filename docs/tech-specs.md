@@ -9,7 +9,7 @@
 - Runtime: **.NET 10.0** (LTS, supporto fino a novembre 2028)
 - Package Manager: **NuGet** con **Central Package Management** (`Directory.Packages.props`) e lock file (`packages.lock.json` per ogni progetto)
 - SDK pinnato in `global.json`: **10.0.201** (rollForward `latestFeature`)
-- Database: **SQL Server 2022** (produzione); **Testcontainers MsSql 2022** (test integration)
+- Database: **SQL Server 2022** (runtime in Dev/Staging/Production, istanza aziendale in rete); **Testcontainers MsSql 2022** solo in CI per la suite integration (auto-skipped in locale se Docker non c'e)
 - Web server: **IIS 10+** (Windows Server 2022+) con ASP.NET Core Hosting Bundle
 
 ## Schemi DB in uso
@@ -99,7 +99,8 @@ Nessuna dipendenza esterna. Solo BCL di .NET 10.
 | AutoFixture + AutoFixture.Xunit2 | 4.18.1 | Unit |
 | Bogus | 35.6.1 | Unit |
 | Microsoft.EntityFrameworkCore.InMemory | 10.0.0 | Unit |
-| Testcontainers.MsSql | 4.1.0 | Integration |
+| Testcontainers.MsSql | 4.1.0 | Integration (auto-skip in locale senza Docker) |
+| Xunit.SkippableFact | 1.5.23 | Integration (permette `Skip.IfNot` per Docker assente) |
 | bunit | 1.34.0 | Component |
 | Microsoft.Playwright | 1.48.0 | E2E |
 

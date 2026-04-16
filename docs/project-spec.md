@@ -186,7 +186,7 @@ graph TD
 | Analyzer/Lint | .NET Roslyn analyzers + StyleCop.Analyzers + SonarAnalyzer.CSharp | ultimi | Qualita e convenzioni |
 | Formatter | `dotnet format` | 10 | Built-in |
 | CI/CD | GitHub Actions | — | Build, test, publish artefatto per IIS |
-| Container (dev) | Docker + SQL Server on Linux container | — | Ambiente di sviluppo uniforme (runtime prod resta IIS/Windows) |
+| Testcontainers (test integration) | Testcontainers.MsSql + Docker | 4.1.x + SQL Server 2022 image | Solo per la suite integration in CI; in locale i test integration si auto-skippano se Docker manca |
 | Package Manager | NuGet + `packages.lock.json` | 10 | Pin deterministico dipendenze (vedi DIR-015) |
 
 ### 3.2 Vincoli di Compatibilita
@@ -449,7 +449,7 @@ prima-nota/
 
 | Ambiente | Piattaforma | URL | Strategia Deploy |
 |----------|-------------|-----|------------------|
-| Development | Windows/macOS/Linux + Docker (SQL Server container) | https://localhost:5001 | `dotnet run` con hot reload |
+| Development | macOS/Windows/Linux client + SQL Server aziendale in rete (DB `PrimaNota_Dev`) | https://localhost:7070 | `dotnet run` con hot reload |
 | Staging | IIS su Windows Server (aziendale) | https://primanota-staging.[dominio-azienda] | GitHub Actions — deploy automatico su merge in `develop` |
 | Production | IIS su Windows Server (aziendale) | https://primanota.[dominio-azienda] | GitHub Actions — deploy su merge in `main` con approvazione manuale |
 

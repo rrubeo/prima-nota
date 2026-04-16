@@ -46,7 +46,7 @@ prima-nota/
 ### Prerequisiti
 
 - .NET SDK **10.0.201** o superiore (rispetta `global.json`)
-- SQL Server 2022 (locale o container Docker)
+- Accesso a un'istanza **SQL Server 2022** (istanza aziendale in rete, Dev DB dedicato)
 - Git
 
 ### Build

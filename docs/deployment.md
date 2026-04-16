@@ -11,8 +11,8 @@ configurazione — niente viene condiviso tra ambienti.
 |---------|-------------|---------|------------|
 | **Scopo** | sviluppo locale, unit/integration test | validazione pre-rilascio, UAT, smoke test di deploy | dati reali aziendali |
 | **Nome DB** | `PrimaNota_Dev` | `PrimaNota_Staging` | `PrimaNota_Production` |
-| **Server DB** | LocalDB oppure SQL Server in Docker sulla workstation | `sql-staging.azienda.local` | `sql.azienda.local` |
-| **Login SQL** | SA LocalDB (Windows auth) oppure `sa` del container | `primanota_app_staging` (db_owner) | `primanota_app_prod` (db_owner) |
+| **Server DB** | SQL Server aziendale in rete (lo stesso del server IIS, o un'istanza dev dedicata) | `sql-staging.azienda.local` | `sql.azienda.local` |
+| **Login SQL** | `primanota_app_dev` (db_owner) | `primanota_app_staging` (db_owner) | `primanota_app_prod` (db_owner) |
 | **Host app** | `https://localhost:7070` (`dotnet run`) | IIS su `iis-staging.azienda.local` | IIS su `iis.azienda.local` |
 | **Hostname** | `localhost` | `primanota-staging.azienda.local` | `primanota.azienda.local` |
 | **Dove vive la connection string** | `dotnet user-secrets` del progetto Web | env variable `Database__ConnectionString` sull'App Pool IIS | idem |
@@ -320,29 +320,22 @@ Verificare nel visualizzatore eventi Windows (o nei log Serilog in `D:\Apps\Prim
 ### Prerequisiti
 
 - .NET SDK 10.0.201 (rispetta `global.json`, `rollForward: latestFeature`)
-- Docker Desktop (per Testcontainers e opzionalmente SQL Server container)
+- Accesso di rete all'**istanza SQL Server aziendale** di sviluppo
 - Git
 
-### Database locale (Development)
+Nessun SQL Server locale, nessun Docker: lo stesso motore SQL Server viene usato per
+Dev, Staging e Production — solo con database e login diversi per ambiente.
 
-Il DB di sviluppo si chiama **`PrimaNota_Dev`** ed è completamente separato da Staging/Production.
+### Database Dev
 
-**Opzione A — SQL Server in Docker (consigliata, cross-platform):**
+Il DBA provvede per te (su richiesta, una tantum):
 
-```bash
-docker run --name mssql-primanota -d \
-  -e ACCEPT_EULA=Y \
-  -e MSSQL_SA_PASSWORD='Strong_Password_123!' \
-  -p 1433:1433 \
-  mcr.microsoft.com/mssql/server:2022-latest
-```
+1. Crea il database vuoto `PrimaNota_Dev` (`CREATE DATABASE ... COLLATE Latin1_General_CI_AS`).
+2. Crea il login `primanota_app_dev` con una password forte.
+3. Mappa il login come `USER` di `PrimaNota_Dev` e aggiunge la membership `db_owner`.
 
-Il database `PrimaNota_Dev` viene creato automaticamente dalla app al primo avvio
-(via `DbContext.Database.MigrateAsync()`), oppure puoi provisioningarlo manualmente
-con lo script `deploy/sql/provision-environment.sql` (vedi sezione 3).
-
-**Opzione B — SQL Server LocalDB (solo Windows):** la connection string di default
-in `appsettings.json` punta già a `(localdb)\\mssqllocaldb;Database=PrimaNota_Dev`.
+Lo schema e le tabelle vengono poi creati automaticamente dall'app al primo avvio
+(`DbContext.Database.MigrateAsync()`).
 
 ### Secrets locali
 
@@ -350,11 +343,10 @@ in `appsettings.json` punta già a `(localdb)\\mssqllocaldb;Database=PrimaNota_D
 cd src/PrimaNota.Web
 dotnet user-secrets init   # solo al primo setup
 
-# Se usi Docker (Opzione A), imposta la connection string:
 dotnet user-secrets set "Database:ConnectionString" \
-  "Server=localhost,1433;Database=PrimaNota_Dev;User Id=sa;Password=Strong_Password_123!;TrustServerCertificate=True;"
+  "Server=<host-sql-server>,1433;Database=PrimaNota_Dev;User Id=primanota_app_dev;Password=<password>;Encrypt=True;TrustServerCertificate=True;"
 
-# Bootstrap admin per il primo login (rimuovilo dopo il primo avvio):
+# Bootstrap admin (rimuovilo dopo il primo login riuscito):
 dotnet user-secrets set "Identity:Bootstrap:Email"    "admin@local"
 dotnet user-secrets set "Identity:Bootstrap:Password" "Admin_Password_123!"
 dotnet user-secrets set "Identity:Bootstrap:FullName" "Administrator"
@@ -364,8 +356,12 @@ dotnet user-secrets set "Authentication:Google:ClientId"     "xxxx.apps.googleus
 dotnet user-secrets set "Authentication:Google:ClientSecret" "GOCSPX-xxxx"
 ```
 
-I secrets di development vivono in `~/.microsoft/usersecrets/prima-nota-web/` (Linux/macOS)
+I secrets di development vivono in `~/.microsoft/usersecrets/prima-nota-web/` (macOS/Linux)
 o `%APPDATA%\Microsoft\UserSecrets\prima-nota-web\` (Windows) — **mai nel repo**.
+
+> `TrustServerCertificate=True` è accettabile **solo** per il certificato self-signed del
+> SQL Server dev aziendale. In Staging/Production si usa `TrustServerCertificate=False`
+> con un certificato valido.
 
 ### Avvio
 
@@ -374,15 +370,19 @@ dotnet restore PrimaNota.slnx
 dotnet run --project src/PrimaNota.Web --launch-profile https
 ```
 
-L'app applica migrations e seeda ruoli + admin al primo avvio. Connettiti a `https://localhost:7070`, login con le credenziali bootstrap.
+Al primo avvio l'app applica le migration, seeda i ruoli e crea l'admin. Connettiti a
+`https://localhost:7070` e fai login con le credenziali di bootstrap.
 
 ### Test
 
 ```bash
-# Unit + component (no Docker)
+# Sempre eseguibili (nessuna dipendenza esterna)
 dotnet test tests/PrimaNota.UnitTests
 dotnet test tests/PrimaNota.ComponentTests
 
-# Integration (richiede Docker in esecuzione)
+# Opzionali in locale: usano Testcontainers (SQL Server effimero).
+# Se Docker non è installato, il test viene automaticamente marcato come Ignorato
+# con un messaggio esplicativo. In CI (ubuntu-latest) Docker è sempre disponibile
+# e il test gira regolarmente.
 dotnet test tests/PrimaNota.IntegrationTests
 ```

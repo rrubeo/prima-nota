@@ -6,7 +6,8 @@ namespace PrimaNota.IntegrationTests.Persistence;
 
 /// <summary>
 /// Smoke integration test that validates the Initial EF migration can be applied
-/// against a real SQL Server 2022 instance.
+/// against a real SQL Server 2022 instance. Skipped automatically if Docker is
+/// not available locally — always runs in CI where Docker is provisioned.
 /// </summary>
 [Collection(SqlServerCollection.Name)]
 public sealed class AppDbContextMigrationTests
@@ -18,9 +19,13 @@ public sealed class AppDbContextMigrationTests
         this.fixture = fixture;
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Migrate_Should_Create_Migrations_History_Table_In_App_Schema()
     {
+        Skip.IfNot(
+            fixture.IsAvailable,
+            $"Docker is not available on this host ({fixture.UnavailableReason}). This test runs automatically in CI.");
+
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseSqlServer(fixture.ConnectionString, sql =>
                 sql.MigrationsHistoryTable("__EFMigrationsHistory", "app"))
