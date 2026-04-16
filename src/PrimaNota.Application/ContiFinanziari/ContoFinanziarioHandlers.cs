@@ -143,21 +143,32 @@ public sealed class ListContiFinanziariHandler : IRequestHandler<ListContiFinanz
             .ThenBy(c => c.Codice)
             .ToListAsync(cancellationToken);
 
-        // TODO(modulo 07): when MovimentoPrimaNota exists, compute
-        // SaldoCorrente = SaldoIniziale + sum(movimenti.Importo)
-        // after DataSaldoIniziale. For now return the opening balance.
+        // Aggregate confirmed/reconciled line sums per account once.
+        var perAccount = await db.Movimenti
+            .AsNoTracking()
+            .Where(m => m.Stato == Domain.PrimaNota.StatoMovimento.Confirmed
+                        || m.Stato == Domain.PrimaNota.StatoMovimento.Reconciled)
+            .SelectMany(m => m.Righe.Select(r => new { r.ContoFinanziarioId, r.Importo, m.Data }))
+            .ToListAsync(cancellationToken);
+
         return rows
-            .Select(c => new ContoFinanziarioListItemDto(
-                c.Id,
-                c.Codice,
-                c.Nome,
-                c.Tipo,
-                c.Istituto,
-                c.Iban,
-                c.Ultime4Cifre,
-                c.SaldoIniziale,
-                c.Valuta,
-                c.Attivo))
+            .Select(c =>
+            {
+                var delta = perAccount
+                    .Where(p => p.ContoFinanziarioId == c.Id && p.Data >= c.DataSaldoIniziale)
+                    .Sum(p => p.Importo);
+                return new ContoFinanziarioListItemDto(
+                    c.Id,
+                    c.Codice,
+                    c.Nome,
+                    c.Tipo,
+                    c.Istituto,
+                    c.Iban,
+                    c.Ultime4Cifre,
+                    c.SaldoIniziale + delta,
+                    c.Valuta,
+                    c.Attivo);
+            })
             .ToList();
     }
 }

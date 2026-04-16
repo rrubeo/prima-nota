@@ -1,0 +1,183 @@
+@page "/movimenti"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.Anagrafiche
+@using PrimaNota.Application.ContiFinanziari
+@using PrimaNota.Application.Iva
+@using PrimaNota.Application.PianoConti
+@using PrimaNota.Application.PrimaNota
+@using PrimaNota.Domain.PrimaNota
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+@inject NavigationManager Navigation
+
+<PageTitle>Movimenti · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Movimenti</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="0">
+    <MudGrid>
+        <MudItem xs="12" sm="3">
+            <MudTextField T="string"
+                          Label="Cerca (descrizione, numero)"
+                          @bind-Value="cerca"
+                          @bind-Value:after="ReloadAsync"
+                          Clearable="true"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" />
+        </MudItem>
+        <MudItem xs="6" sm="2">
+            <MudSelect T="StatoMovimento?" Label="Stato" @bind-Value="statoFilter" @bind-Value:after="ReloadAsync" Clearable="true">
+                <MudSelectItem T="StatoMovimento?" Value="@((StatoMovimento?)null)">Tutti</MudSelectItem>
+                <MudSelectItem T="StatoMovimento?" Value="@((StatoMovimento?)StatoMovimento.Draft)">Draft</MudSelectItem>
+                <MudSelectItem T="StatoMovimento?" Value="@((StatoMovimento?)StatoMovimento.Confirmed)">Confirmed</MudSelectItem>
+                <MudSelectItem T="StatoMovimento?" Value="@((StatoMovimento?)StatoMovimento.Reconciled)">Reconciled</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="6" sm="2">
+            <MudSelect T="Guid?" Label="Conto" @bind-Value="contoFilter" @bind-Value:after="ReloadAsync" Clearable="true">
+                <MudSelectItem T="Guid?" Value="@((Guid?)null)">Tutti</MudSelectItem>
+                @foreach (var c in conti)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)c.Id)">@c.Codice — @c.Nome</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="6" sm="2">
+            <MudDatePicker Label="Dal"
+                           Date="@DateOnlyToDate(dateFrom)"
+                           DateChanged="d => { dateFrom = DateToDateOnly(d); _ = ReloadAsync(); }" />
+        </MudItem>
+        <MudItem xs="6" sm="2">
+            <MudDatePicker Label="Al"
+                           Date="@DateOnlyToDate(dateTo)"
+                           DateChanged="d => { dateTo = DateToDateOnly(d); _ = ReloadAsync(); }" />
+        </MudItem>
+        <MudItem xs="12" sm="1" Class="d-flex align-center justify-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick='() => Navigation.NavigateTo("/movimenti/nuovo")'>
+                Nuovo
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudTable Items="items"
+          Hover="true"
+          Dense="true"
+          Loading="loading"
+          Striped="true"
+          Virtualize="true"
+          FixedHeader="true"
+          Height="calc(100vh - 340px)">
+    <HeaderContent>
+        <MudTh>Data</MudTh>
+        <MudTh>Causale</MudTh>
+        <MudTh>Descrizione</MudTh>
+        <MudTh>Numero</MudTh>
+        <MudTh>Anagrafica</MudTh>
+        <MudTh Style="text-align:right">Totale</MudTh>
+        <MudTh>Righe</MudTh>
+        <MudTh>Allegati</MudTh>
+        <MudTh>Stato</MudTh>
+        <MudTh Style="width:80px;"></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Data.ToString("dd/MM/yyyy", ItCulture)</MudTd>
+        <MudTd>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.CausaleCodice</MudText><br />
+            <MudText Typo="Typo.body2">@context.CausaleNome</MudText>
+        </MudTd>
+        <MudTd>@context.Descrizione</MudTd>
+        <MudTd>@context.Numero</MudTd>
+        <MudTd>@context.AnagraficaRagioneSociale</MudTd>
+        <MudTd Style="text-align:right; font-family: monospace; font-weight: 600;"
+               class="@(context.Totale < 0 ? "mud-error-text" : (context.Totale > 0 ? "mud-success-text" : ""))">
+            @FormatCurrency(context.Totale)
+        </MudTd>
+        <MudTd>@context.NumeroRighe</MudTd>
+        <MudTd>
+            @if (context.AllegatiCount > 0)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.AttachFile" Size="Size.Small" />
+                <span>@context.AllegatiCount</span>
+            }
+        </MudTd>
+        <MudTd>
+            <MudChip T="string"
+                     Size="Size.Small"
+                     Color="@StatoColor(context.Stato)"
+                     Variant="Variant.Filled">
+                @context.Stato
+            </MudChip>
+        </MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                           Size="Size.Small"
+                           Color="Color.Primary"
+                           OnClick="@(() => Navigation.NavigateTo($"/movimenti/{context.Id}"))" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Class="pa-6">Nessun movimento per i filtri selezionati.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private static readonly CultureInfo ItCulture = new("it-IT");
+
+    private string? cerca;
+    private StatoMovimento? statoFilter;
+    private Guid? contoFilter;
+    private DateOnly? dateFrom;
+    private DateOnly? dateTo;
+    private bool loading;
+
+    private IReadOnlyList<MovimentoListItemDto> items = Array.Empty<MovimentoListItemDto>();
+    private IReadOnlyList<ContoFinanziarioListItemDto> conti = Array.Empty<ContoFinanziarioListItemDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        conti = await Mediator.Send(new ListContiFinanziari(false));
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        loading = true;
+        try
+        {
+            items = await Mediator.Send(new ListMovimenti(
+                Esercizio.Anno,
+                statoFilter,
+                contoFilter,
+                null,
+                null,
+                null,
+                dateFrom,
+                dateTo,
+                null,
+                null,
+                cerca));
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private static string FormatCurrency(decimal v) => v.ToString("N2", ItCulture) + " €";
+
+    private static Color StatoColor(StatoMovimento stato) => stato switch
+    {
+        StatoMovimento.Draft => Color.Default,
+        StatoMovimento.Confirmed => Color.Info,
+        StatoMovimento.Reconciled => Color.Success,
+        _ => Color.Default
+    };
+
+    private static DateTime? DateOnlyToDate(DateOnly? d) => d.HasValue ? d.Value.ToDateTime(TimeOnly.MinValue) : null;
+    private static DateOnly? DateToDateOnly(DateTime? d) => d.HasValue ? DateOnly.FromDateTime(d.Value) : null;
+}

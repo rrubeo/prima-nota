@@ -1,0 +1,459 @@
+@page "/movimenti/nuovo"
+@page "/movimenti/{Id:guid}"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.Anagrafiche
+@using PrimaNota.Application.ContiFinanziari
+@using PrimaNota.Application.Iva
+@using PrimaNota.Application.PianoConti
+@using PrimaNota.Application.PrimaNota
+@using PrimaNota.Domain.PrimaNota
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject IHttpClientFactory HttpFactory
+
+<PageTitle>@Title · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">@Title</MudText>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="0">
+        <MudGrid>
+            <MudItem xs="12" sm="3">
+                <MudDatePicker Label="Data"
+                               Date="@DateOnlyToDate(model.Data)"
+                               DateChanged="@(d => { if (d.HasValue) { model.Data = DateOnly.FromDateTime(d.Value); model.EsercizioAnno = model.Data.Year; } })"
+                               Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudTextField @bind-Value="model.Numero" Label="Numero (fattura, ricevuta...)" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid" @bind-Value="model.CausaleId" Label="Causale" Required="true">
+                    @foreach (var c in causali)
+                    {
+                        <MudSelectItem T="Guid" Value="@c.Id">@c.Codice — @c.Nome</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="9">
+                <MudTextField @bind-Value="model.Descrizione" Label="Descrizione" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudSelect T="Guid?" @bind-Value="model.AnagraficaId" Label="Anagrafica (default)" Clearable="true">
+                    <MudSelectItem T="Guid?" Value="@((Guid?)null)">— nessuna —</MudSelectItem>
+                    @foreach (var a in anagrafiche)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.RagioneSociale</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="model.Note" Label="Note" Lines="2" />
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="0">
+        <div class="d-flex align-center mb-3">
+            <MudText Typo="Typo.h6">Righe</MudText>
+            <MudSpacer />
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mr-3">Totale: @FormatCurrency(TotaleRighe)</MudText>
+            <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="AddRiga" Disabled="!IsEditable">Aggiungi riga</MudButton>
+        </div>
+
+        @if (model.Righe.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">Nessuna riga. Aggiungine almeno una.</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="model.Righe" Dense="true" Hover="true" Breakpoint="Breakpoint.None">
+                <HeaderContent>
+                    <MudTh Style="width:130px">Importo €</MudTh>
+                    <MudTh>Conto</MudTh>
+                    <MudTh>Categoria</MudTh>
+                    <MudTh>Anagrafica</MudTh>
+                    <MudTh>Aliquota IVA</MudTh>
+                    <MudTh>Note</MudTh>
+                    <MudTh Style="width:50px"></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd><MudNumericField T="decimal" @bind-Value="context.Importo" HideSpinButtons="true" Disabled="!IsEditable" /></MudTd>
+                    <MudTd>
+                        <MudSelect T="Guid" @bind-Value="context.ContoFinanziarioId" Disabled="!IsEditable" Dense="true">
+                            @foreach (var c in conti)
+                            {
+                                <MudSelectItem T="Guid" Value="@c.Id">@c.Codice</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTd>
+                    <MudTd>
+                        <MudSelect T="Guid" @bind-Value="context.CategoriaId" Disabled="!IsEditable" Dense="true">
+                            @foreach (var c in categorie)
+                            {
+                                <MudSelectItem T="Guid" Value="@c.Id">@c.Codice</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTd>
+                    <MudTd>
+                        <MudSelect T="Guid?" @bind-Value="context.AnagraficaId" Disabled="!IsEditable" Dense="true" Clearable="true">
+                            <MudSelectItem T="Guid?" Value="@((Guid?)null)">—</MudSelectItem>
+                            @foreach (var a in anagrafiche)
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.RagioneSociale</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTd>
+                    <MudTd>
+                        <MudSelect T="Guid?" @bind-Value="context.AliquotaIvaId" Disabled="!IsEditable" Dense="true" Clearable="true">
+                            <MudSelectItem T="Guid?" Value="@((Guid?)null)">—</MudSelectItem>
+                            @foreach (var a in aliquote)
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.Codice</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTd>
+                    <MudTd><MudTextField @bind-Value="context.Note" Margin="Margin.Dense" Disabled="!IsEditable" /></MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@(() => RemoveRiga(context))" Disabled="!IsEditable" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
+
+    @if (Id.HasValue)
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="0">
+            <div class="d-flex align-center mb-3">
+                <MudText Typo="Typo.h6">Allegati</MudText>
+                <MudSpacer />
+                <MudFileUpload T="IBrowserFile"
+                               OnFilesChanged="OnAllegatoSelected"
+                               Accept=".pdf,.png,.jpg,.jpeg,.xlsx,.csv,.xml"
+                               Hidden="false"
+                               MaximumFileCount="1"
+                               Disabled="@(!CanAddAttachment)">
+                    <ActivatorContent>
+                        <MudButton HtmlTag="label"
+                                   Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.UploadFile"
+                                   Disabled="@(!CanAddAttachment)">
+                            Carica allegato
+                        </MudButton>
+                    </ActivatorContent>
+                </MudFileUpload>
+            </div>
+
+            @if (allegati.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Nessun allegato.</MudText>
+            }
+            else
+            {
+                <MudList T="AllegatoDto" Dense="true">
+                    @foreach (var a in allegati)
+                    {
+                        <MudListItem T="AllegatoDto" Icon="@Icons.Material.Filled.Description">
+                            <div class="d-flex align-center w-100">
+                                <MudLink Href="@($"/allegati/{a.Id}")" Target="_blank" Class="mr-2">
+                                    @a.NomeFile
+                                </MudLink>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @FormatFileSize(a.Size) · @a.UploadedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm", ItCulture)
+                                </MudText>
+                                <MudSpacer />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Size="Size.Small"
+                                               Color="Color.Error"
+                                               OnClick="@(() => DeleteAllegatoAsync(a))"
+                                               Disabled="@(!CanAddAttachment)" />
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudPaper>
+    }
+
+    <MudStack Row="true" Spacing="2">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveAsync" Disabled="@(saving || !IsEditable)">
+            Salva bozza
+        </MudButton>
+        @if (stato == StatoMovimento.Draft && Id.HasValue)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.CheckCircle"
+                       OnClick="ConfirmAsync" Disabled="@saving">
+                Conferma
+            </MudButton>
+        }
+        @if (stato == StatoMovimento.Confirmed)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Warning" StartIcon="@Icons.Material.Filled.Undo"
+                       OnClick="UnconfirmAsync">
+                Riporta in bozza
+            </MudButton>
+        }
+        <MudSpacer />
+        @if (Id.HasValue && stato == StatoMovimento.Draft)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Delete"
+                       OnClick="DeleteAsync">
+                Elimina
+            </MudButton>
+        }
+        <MudButton Variant="Variant.Text" OnClick='() => Navigation.NavigateTo("/movimenti")'>
+            Indietro
+        </MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private static readonly CultureInfo ItCulture = new("it-IT");
+
+    private MovimentoInput model = new();
+    private StatoMovimento stato = StatoMovimento.Draft;
+    private byte[] rowVersion = Array.Empty<byte>();
+    private bool loading;
+    private bool saving;
+
+    private IReadOnlyList<CausaleDto> causali = Array.Empty<CausaleDto>();
+    private IReadOnlyList<CategoriaDto> categorie = Array.Empty<CategoriaDto>();
+    private IReadOnlyList<AliquotaIvaDto> aliquote = Array.Empty<AliquotaIvaDto>();
+    private IReadOnlyList<ContoFinanziarioListItemDto> conti = Array.Empty<ContoFinanziarioListItemDto>();
+    private IReadOnlyList<AnagraficaListItemDto> anagrafiche = Array.Empty<AnagraficaListItemDto>();
+    private IReadOnlyList<AllegatoDto> allegati = Array.Empty<AllegatoDto>();
+
+    private string Title => Id.HasValue ? "Modifica movimento" : "Nuovo movimento";
+    private bool IsEditable => stato == StatoMovimento.Draft;
+    private bool CanAddAttachment => Id.HasValue && stato != StatoMovimento.Reconciled;
+    private decimal TotaleRighe => model.Righe.Sum(r => r.Importo);
+
+    protected override async Task OnInitializedAsync()
+    {
+        loading = true;
+        try
+        {
+            causali = await Mediator.Send(new ListCausali(false));
+            categorie = await Mediator.Send(new ListCategorie(false));
+            aliquote = await Mediator.Send(new ListAliquoteIva(false));
+            conti = await Mediator.Send(new ListContiFinanziari(false));
+            anagrafiche = await Mediator.Send(new ListAnagrafiche(AnagraficaRuoloFilter.Tutti, false, null));
+
+            if (Id.HasValue)
+            {
+                var dto = await Mediator.Send(new GetMovimento(Id.Value));
+                if (dto is null)
+                {
+                    Snackbar.Add("Movimento non trovato.", Severity.Error);
+                    Navigation.NavigateTo("/movimenti");
+                    return;
+                }
+
+                stato = dto.Stato;
+                rowVersion = dto.RowVersion;
+                allegati = dto.Allegati;
+                model = new MovimentoInput
+                {
+                    Data = dto.Data,
+                    EsercizioAnno = dto.EsercizioAnno,
+                    Descrizione = dto.Descrizione,
+                    Numero = dto.Numero,
+                    CausaleId = dto.CausaleId,
+                    AnagraficaId = dto.AnagraficaId,
+                    Note = dto.Note,
+                    Righe = dto.Righe.Select(r => new RigaMovimentoInput
+                    {
+                        Id = r.Id,
+                        Importo = r.Importo,
+                        ContoFinanziarioId = r.ContoFinanziarioId,
+                        CategoriaId = r.CategoriaId,
+                        AnagraficaId = r.AnagraficaId,
+                        AliquotaIvaId = r.AliquotaIvaId,
+                        Note = r.Note,
+                    }).ToList(),
+                };
+            }
+            else
+            {
+                var oggi = DateOnly.FromDateTime(DateTime.UtcNow);
+                model = new MovimentoInput
+                {
+                    Data = oggi,
+                    EsercizioAnno = Esercizio.Anno,
+                    Righe = new List<RigaMovimentoInput> { new() },
+                };
+            }
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void AddRiga()
+    {
+        model.Righe.Add(new RigaMovimentoInput());
+    }
+
+    private void RemoveRiga(RigaMovimentoInput riga)
+    {
+        model.Righe.Remove(riga);
+    }
+
+    private async Task SaveAsync()
+    {
+        model.EsercizioAnno = model.Data.Year;
+
+        if (model.Righe.Count == 0)
+        {
+            Snackbar.Add("Aggiungi almeno una riga.", Severity.Warning);
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            if (Id.HasValue)
+            {
+                await Mediator.Send(new UpdateMovimento(Id.Value, model, rowVersion));
+                Snackbar.Add("Movimento aggiornato.", Severity.Success);
+                await ReloadAsync();
+            }
+            else
+            {
+                var newId = await Mediator.Send(new CreateMovimento(model));
+                Snackbar.Add("Movimento creato.", Severity.Success);
+                Navigation.NavigateTo($"/movimenti/{newId}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (!Id.HasValue) return;
+        try
+        {
+            await Mediator.Send(new ConfirmMovimento(Id.Value, rowVersion));
+            Snackbar.Add("Movimento confermato.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task UnconfirmAsync()
+    {
+        if (!Id.HasValue) return;
+        await Mediator.Send(new UnconfirmMovimento(Id.Value, rowVersion));
+        Snackbar.Add("Movimento riportato in bozza.", Severity.Info);
+        await ReloadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (!Id.HasValue) return;
+        var confirmed = await Dialog.ShowMessageBox(
+            "Conferma eliminazione",
+            "Eliminare il movimento in bozza? Gli allegati verranno rimossi.",
+            yesText: "Elimina", cancelText: "Annulla");
+        if (confirmed != true) return;
+
+        await Mediator.Send(new DeleteMovimento(Id.Value, rowVersion));
+        Snackbar.Add("Movimento eliminato.", Severity.Info);
+        Navigation.NavigateTo("/movimenti");
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (!Id.HasValue) return;
+        var dto = await Mediator.Send(new GetMovimento(Id.Value));
+        if (dto is null) return;
+        stato = dto.Stato;
+        rowVersion = dto.RowVersion;
+        allegati = dto.Allegati;
+    }
+
+    private async Task OnAllegatoSelected(InputFileChangeEventArgs e)
+    {
+        if (!Id.HasValue) return;
+        var file = e.File;
+        if (file is null) return;
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            await using var fs = file.OpenReadStream(20L * 1024 * 1024);
+            using var sc = new StreamContent(fs);
+            sc.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+            content.Add(sc, "file", file.Name);
+
+            using var http = HttpFactory.CreateClient();
+            http.BaseAddress = new Uri(Navigation.BaseUri);
+            var resp = await http.PostAsync(new Uri($"/allegati/{Id.Value}/upload", UriKind.Relative), content);
+            if (!resp.IsSuccessStatusCode)
+            {
+                var msg = await resp.Content.ReadAsStringAsync();
+                Snackbar.Add($"Upload fallito: {msg}", Severity.Error);
+                return;
+            }
+
+            Snackbar.Add("Allegato caricato.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore upload: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteAllegatoAsync(AllegatoDto a)
+    {
+        if (!Id.HasValue) return;
+        var confirmed = await Dialog.ShowMessageBox(
+            "Conferma eliminazione allegato",
+            $"Eliminare '{a.NomeFile}'?",
+            yesText: "Elimina", cancelText: "Annulla");
+        if (confirmed != true) return;
+
+        await Mediator.Send(new DeleteAllegato(Id.Value, a.Id));
+        Snackbar.Add("Allegato rimosso.", Severity.Info);
+        await ReloadAsync();
+    }
+
+    private static string FormatCurrency(decimal v) => v.ToString("N2", ItCulture) + " €";
+
+    private static string FormatFileSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024:N0} KB",
+        _ => $"{bytes / 1024d / 1024d:N1} MB"
+    };
+
+    private static DateTime? DateOnlyToDate(DateOnly d) => d.ToDateTime(TimeOnly.MinValue);
+}
