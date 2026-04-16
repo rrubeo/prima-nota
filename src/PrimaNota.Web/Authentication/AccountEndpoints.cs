@@ -31,7 +31,7 @@ internal static class AccountEndpoints
     private static async Task<IResult> HandleLoginAsync(
         [FromForm] string email,
         [FromForm] string password,
-        [FromForm] bool rememberMe,
+        [FromForm] bool? rememberMe,
         [FromForm] string? returnUrl,
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
@@ -52,7 +52,7 @@ internal static class AccountEndpoints
         var result = await signInManager.PasswordSignInAsync(
             user,
             password,
-            isPersistent: rememberMe,
+            isPersistent: rememberMe ?? false,
             lockoutOnFailure: true);
 
         if (!result.Succeeded)
