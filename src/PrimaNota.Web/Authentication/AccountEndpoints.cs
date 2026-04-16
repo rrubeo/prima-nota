@@ -22,10 +22,71 @@ internal static class AccountEndpoints
 
         group.MapPost("/Login", HandleLoginAsync);
         group.MapPost("/Logout", HandleLogoutAsync);
+        group.MapPost("/ChangePassword", HandleChangePasswordAsync).RequireAuthorization();
         group.MapGet("/ExternalLogin", HandleExternalChallenge);
         group.MapGet("/ExternalCallback", HandleExternalCallbackAsync);
 
         return app;
+    }
+
+    private static async Task<IResult> HandleChangePasswordAsync(
+        [FromForm] string currentPassword,
+        [FromForm] string newPassword,
+        [FromForm] string confirmPassword,
+        [FromForm] string? returnUrl,
+        HttpContext http,
+        SignInManager<ApplicationUser> signInManager,
+        UserManager<ApplicationUser> userManager,
+        IAuditLogger audit)
+    {
+        var redirectTarget = SanitizeReturnUrl(returnUrl);
+        var failBase = $"/account/cambia-password?returnUrl={Uri.EscapeDataString(redirectTarget)}";
+
+        if (string.IsNullOrWhiteSpace(currentPassword) ||
+            string.IsNullOrWhiteSpace(newPassword) ||
+            string.IsNullOrWhiteSpace(confirmPassword))
+        {
+            return Results.Redirect(failBase + "&error=missing");
+        }
+
+        if (!string.Equals(newPassword, confirmPassword, StringComparison.Ordinal))
+        {
+            return Results.Redirect(failBase + "&error=mismatch");
+        }
+
+        var user = await userManager.GetUserAsync(http.User);
+        if (user is null)
+        {
+            return Results.Redirect("/Account/Login");
+        }
+
+        var result = await userManager.ChangePasswordAsync(user, currentPassword, newPassword);
+        if (!result.Succeeded)
+        {
+            var first = result.Errors.FirstOrDefault()?.Code ?? "invalid";
+            var reason = first switch
+            {
+                "PasswordMismatch" => "wrong_current",
+                "PasswordTooShort" or "PasswordRequiresDigit" or "PasswordRequiresLower"
+                    or "PasswordRequiresUpper" or "PasswordRequiresNonAlphanumeric" => "weak",
+                _ => "invalid",
+            };
+            await audit.LogAsync(
+                AuditEventKind.PasswordChanged,
+                $"Password change failed for {user.Email}: {first}",
+                targetType: "ApplicationUser",
+                targetId: user.Id);
+            return Results.Redirect(failBase + $"&error={reason}");
+        }
+
+        await signInManager.RefreshSignInAsync(user);
+        await audit.LogAsync(
+            AuditEventKind.PasswordChanged,
+            $"Password changed for {user.Email}",
+            targetType: "ApplicationUser",
+            targetId: user.Id);
+
+        return Results.Redirect(redirectTarget + (redirectTarget.Contains('?') ? "&" : "?") + "passwordChanged=1");
     }
 
     private static async Task<IResult> HandleLoginAsync(
