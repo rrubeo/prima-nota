@@ -1,0 +1,114 @@
+@page "/admin/esercizi"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireAdmin)]
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.Esercizi
+@using PrimaNota.Domain.Esercizi
+@using PrimaNota.Domain.Iva
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+@inject ISnackbar Snackbar
+
+<PageTitle>Esercizi contabili · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Esercizio contabile @Esercizio.Anno</MudText>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (config is null)
+{
+    <MudAlert Severity="Severity.Warning">Esercizio non trovato.</MudAlert>
+}
+else
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="0" Style="max-width: 720px;">
+        <MudText Typo="Typo.h6" GutterBottom="true">Configurazione IVA</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="RegimeIva" @bind-Value="regime" Label="Regime">
+                    <MudSelectItem Value="RegimeIva.Ordinario">Ordinario</MudSelectItem>
+                    <MudSelectItem Value="RegimeIva.Forfettario">Forfettario</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="PeriodicitaIva" @bind-Value="periodicita" Label="Periodicità liquidazione">
+                    <MudSelectItem Value="PeriodicitaIva.Trimestrale">Trimestrale</MudSelectItem>
+                    <MudSelectItem Value="PeriodicitaIva.Mensile">Mensile</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            @if (regime == RegimeIva.Forfettario)
+            {
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="decimal?"
+                                     @bind-Value="coefficiente"
+                                     Label="Coefficiente di redditività (%)"
+                                     Min="0m"
+                                     Max="100m"
+                                     HelperText="Valori tipici per attività: 40, 62, 67, 78, 86" />
+                </MudItem>
+            }
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Info">
+                    Stato esercizio: <strong>@config.Stato</strong>. Modifiche ammesse finché l'esercizio non è chiuso.
+                </MudAlert>
+            </MudItem>
+            <MudItem xs="12">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveAsync"
+                           Disabled="saving || config.Stato == StatoEsercizio.Chiuso">
+                    Salva configurazione
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@code {
+    private bool loading = true;
+    private bool saving;
+    private EsercizioIvaConfigDto? config;
+    private RegimeIva regime = RegimeIva.Ordinario;
+    private PeriodicitaIva periodicita = PeriodicitaIva.Trimestrale;
+    private decimal? coefficiente;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            config = await Mediator.Send(new GetEsercizioIvaConfig(Esercizio.Anno));
+            if (config is not null)
+            {
+                regime = config.Regime;
+                periodicita = config.Periodicita;
+                coefficiente = config.CoefficienteRedditivitaForfettario;
+            }
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        try
+        {
+            await Mediator.Send(new UpdateEsercizioIvaConfig(Esercizio.Anno, regime, periodicita, coefficiente));
+            Snackbar.Add("Configurazione IVA aggiornata.", Severity.Success);
+            config = await Mediator.Send(new GetEsercizioIvaConfig(Esercizio.Anno));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

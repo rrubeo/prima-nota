@@ -1,0 +1,111 @@
+@page "/iva/registri"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.Esercizi
+@using PrimaNota.Application.Iva
+@using PrimaNota.Domain.Iva
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+
+<PageTitle>Registri IVA · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Registri IVA</MudText>
+
+@if (loadingConfig)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (config is null)
+{
+    <MudAlert Severity="Severity.Warning">Configurazione IVA dell'esercizio non trovata.</MudAlert>
+}
+else if (config.Regime == RegimeIva.Forfettario)
+{
+    <MudAlert Severity="Severity.Info">
+        L'esercizio @Esercizio.Anno è in regime <strong>forfettario</strong>: non sono previsti registri IVA
+        né liquidazione periodica. Il coefficiente di redditività configurato è
+        @(config.CoefficienteRedditivitaForfettario?.ToString("0.##", ItCulture))%.
+    </MudAlert>
+}
+else
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="0">
+        <MudGrid>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="int" Value="periodoIndice" ValueChanged="OnPeriodoChanged" Label="Periodo">
+                    @foreach (var p in IvaPeriodo.Elenco(Esercizio.Anno, config.Periodicita))
+                    {
+                        <MudSelectItem Value="@p.Indice">@p.Label</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="8" Class="d-flex align-center">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Periodicità: <strong>@config.Periodicita</strong> · Regime: <strong>@config.Regime</strong>
+                </MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudTabs Outlined="false" Rounded="true" Border="false" ApplyEffectsToContainer="true" Class="pn-iva-tabs">
+        <MudTabPanel Text="Vendite">
+            <RegistroIvaTable Righe="venditeRows" Loading="loading" />
+        </MudTabPanel>
+        <MudTabPanel Text="Acquisti">
+            <RegistroIvaTable Righe="acquistiRows" Loading="loading" />
+        </MudTabPanel>
+        <MudTabPanel Text="Corrispettivi">
+            <RegistroIvaTable Righe="corrispettiviRows" Loading="loading" />
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    private static readonly CultureInfo ItCulture = new("it-IT");
+
+    private bool loadingConfig = true;
+    private bool loading;
+    private EsercizioIvaConfigDto? config;
+    private int periodoIndice = 1;
+
+    private IReadOnlyList<RegistroIvaRigaDto> venditeRows = Array.Empty<RegistroIvaRigaDto>();
+    private IReadOnlyList<RegistroIvaRigaDto> acquistiRows = Array.Empty<RegistroIvaRigaDto>();
+    private IReadOnlyList<RegistroIvaRigaDto> corrispettiviRows = Array.Empty<RegistroIvaRigaDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        config = await Mediator.Send(new GetEsercizioIvaConfig(Esercizio.Anno));
+        loadingConfig = false;
+
+        if (config is not null && config.Regime == RegimeIva.Ordinario)
+        {
+            periodoIndice = 1;
+            await ReloadAsync();
+        }
+    }
+
+    private async Task OnPeriodoChanged(int idx)
+    {
+        periodoIndice = idx;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (config is null) return;
+        loading = true;
+        try
+        {
+            var periodo = new IvaPeriodo(Esercizio.Anno, config.Periodicita, periodoIndice);
+            venditeRows = await Mediator.Send(new GetRegistroIva(TipoRegistroIva.Vendite, periodo));
+            acquistiRows = await Mediator.Send(new GetRegistroIva(TipoRegistroIva.Acquisti, periodo));
+            corrispettiviRows = await Mediator.Send(new GetRegistroIva(TipoRegistroIva.Corrispettivi, periodo));
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

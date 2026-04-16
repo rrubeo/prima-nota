@@ -70,3 +70,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ListContiFinanziariHandler` now computes real SaldoCorrente
 - Migration `AddMovimentiPrimaNota` + `deploy/sql/migrations/008_AddMovimentiPrimaNota.sql`
 - 15 new unit tests on MovimentoPrimaNota (18 total green)
+
+### Phase 4 — Gestione IVA (Module 08)
+
+- Domain: `RegimeIva` enum (Ordinario / Forfettario), `PeriodicitaIva` (Mensile / Trimestrale), `TipoRegistroIva` (Vendite / Acquisti / Corrispettivi)
+- `EsercizioContabile.ConfiguraIva(regime, periodicita, coefficienteRedditivita)` invariant: Forfettario requires 0-100% coefficient; closed exercises cannot be reconfigured
+- `IvaScorporo` pure helper: `Scorpora(lordo, %)` returns `(imponibile, imposta)` with banker's rounding; sign preserved on negative amounts
+- Migration `AddEsercizioIvaConfig` adds `RegimeIva`, `PeriodicitaIva`, `CoefficienteRedditivitaForfettario` columns (defaults Ordinario/Trimestrale for existing rows) + idempotent SQL `009_AddEsercizioIvaConfig.sql`
+- Application: `IvaPeriodo` record (supports monthly and quarterly, localised label), `GetRegistroIva` query (derives register from causale kind + category nature), `GetLiquidazioneIva` query (debito, credito totale/indetraibile/detraibile, saldo periodo, credito riportato dai periodi precedenti, saldo finale); `GetEsercizioIvaConfig` / `UpdateEsercizioIvaConfig` commands
+- UI: `/iva/registri` with period selector + tabs Vendite/Acquisti/Corrispettivi showing rows with controparte, P.IVA/CF, aliquota chip, imponibile/imposta/totale and footer totals; `/iva/liquidazione` with three KPI cards (IVA debito, IVA credito detraibile, saldo finale a debito/credito); Forfettario shows an informational alert and skips the reports
+- UI: `/admin/esercizi` page for administrators to configure the regime/periodicity/coefficient per fiscal year
+- NavMenu: Esercizi link now active under Amministrazione; Utenti link marked as "(modulo 16)"
+- 14 new unit tests (scorporo IVA standard/negative/zero/rounding + EsercizioContabile.ConfiguraIva invariants); total 32 green
+- ADR-0001 `docs/adr/0001-regole-iva-implementate.md` documenting the scope choices, calculation formulas and known limitations (e.g. no opening VAT credit from prior year, no official printable registers)

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PrimaNota.Application.Abstractions;
 using PrimaNota.Domain.Anagrafiche;
 using PrimaNota.Domain.ContiFinanziari;
+using PrimaNota.Domain.Esercizi;
 using PrimaNota.Domain.Iva;
 using PrimaNota.Domain.PianoConti;
 using PrimaNota.Domain.PrimaNota;
@@ -42,6 +43,9 @@ public sealed class AppDbContext
 
     /// <summary>Gets the <see cref="MovimentoPrimaNota"/> set.</summary>
     public DbSet<MovimentoPrimaNota> Movimenti => Set<MovimentoPrimaNota>();
+
+    /// <summary>Gets the <see cref="EsercizioContabile"/> set.</summary>
+    public DbSet<EsercizioContabile> Esercizi => Set<EsercizioContabile>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)

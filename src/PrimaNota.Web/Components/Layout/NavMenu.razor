@@ -30,8 +30,8 @@
             </MudNavGroup>
 
             <MudNavGroup Title="IVA" Icon="@Icons.Material.Filled.Percent">
-                <MudNavLink Href="/iva/registri">Registri IVA</MudNavLink>
-                <MudNavLink Href="/iva/liquidazione">Liquidazione periodica</MudNavLink>
+                <MudNavLink Href="/iva/registri" Icon="@Icons.Material.Filled.TableView">Registri IVA</MudNavLink>
+                <MudNavLink Href="/iva/liquidazione" Icon="@Icons.Material.Filled.Calculate">Liquidazione periodica</MudNavLink>
             </MudNavGroup>
 
             <MudNavGroup Title="Report" Icon="@Icons.Material.Filled.BarChart">
@@ -47,8 +47,8 @@
         <AuthorizeView Policy="@AuthorizationPolicies.RequireAdmin">
             <MudDivider Class="my-3" />
             <MudNavGroup Title="Amministrazione" Icon="@Icons.Material.Filled.Tune">
-                <MudNavLink Href="/admin/utenti">Utenti</MudNavLink>
-                <MudNavLink Href="/admin/esercizi">Esercizi contabili</MudNavLink>
+                <MudNavLink Href="/admin/utenti" Disabled="true">Utenti (modulo 16)</MudNavLink>
+                <MudNavLink Href="/admin/esercizi" Icon="@Icons.Material.Filled.CalendarMonth">Esercizi contabili</MudNavLink>
                 <MudNavLink Href="/admin/regole-riconciliazione">Regole riconciliazione</MudNavLink>
                 <MudNavLink Href="/admin/audit-log">Audit log</MudNavLink>
                 <MudNavLink Href="/hangfire" Target="_blank" Icon="@Icons.Material.Filled.WorkHistory">

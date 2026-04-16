@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using PrimaNota.Domain.Anagrafiche;
 using PrimaNota.Domain.ContiFinanziari;
+using PrimaNota.Domain.Esercizi;
 using PrimaNota.Domain.Iva;
 using PrimaNota.Domain.PianoConti;
 using Movimento = PrimaNota.Domain.PrimaNota.MovimentoPrimaNota;
@@ -35,6 +36,9 @@ public interface IApplicationDbContext
 
     /// <summary>Gets the <see cref="Movimento"/> set.</summary>
     DbSet<Movimento> Movimenti { get; }
+
+    /// <summary>Gets the <see cref="EsercizioContabile"/> set.</summary>
+    DbSet<EsercizioContabile> Esercizi { get; }
 
     /// <summary>Persists pending changes to the underlying store.</summary>
     /// <param name="cancellationToken">Token to cancel the operation.</param>

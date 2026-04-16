@@ -23,6 +23,16 @@ internal sealed class EsercizioContabileConfiguration : IEntityTypeConfiguration
             .IsRequired();
         builder.Property(e => e.DataChiusura);
 
+        builder.Property(e => e.RegimeIva)
+            .HasConversion<string>()
+            .HasMaxLength(24)
+            .IsRequired();
+        builder.Property(e => e.PeriodicitaIva)
+            .HasConversion<string>()
+            .HasMaxLength(16)
+            .IsRequired();
+        builder.Property(e => e.CoefficienteRedditivitaForfettario).HasPrecision(5, 2);
+
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.CreatedBy).HasMaxLength(450);
         builder.Property(e => e.UpdatedAt);

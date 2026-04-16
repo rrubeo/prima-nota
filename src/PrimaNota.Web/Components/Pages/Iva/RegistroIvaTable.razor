@@ -1,0 +1,58 @@
+@using System.Globalization
+@using PrimaNota.Application.Iva
+
+<MudTable Items="Righe"
+          Hover="true"
+          Dense="true"
+          Loading="Loading"
+          Striped="true"
+          Class="mt-3"
+          Breakpoint="Breakpoint.None">
+    <HeaderContent>
+        <MudTh>Data</MudTh>
+        <MudTh>Numero</MudTh>
+        <MudTh>Causale</MudTh>
+        <MudTh>Controparte</MudTh>
+        <MudTh>P.IVA / CF</MudTh>
+        <MudTh>Descrizione</MudTh>
+        <MudTh>Aliquota</MudTh>
+        <MudTh Style="text-align:right">Imponibile</MudTh>
+        <MudTh Style="text-align:right">Imposta</MudTh>
+        <MudTh Style="text-align:right">Totale</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Data.ToString("dd/MM/yyyy", ItCulture)</MudTd>
+        <MudTd>@context.Numero</MudTd>
+        <MudTd>@context.CausaleCodice</MudTd>
+        <MudTd>@context.AnagraficaRagioneSociale</MudTd>
+        <MudTd>@(context.PartitaIva ?? context.CodiceFiscale)</MudTd>
+        <MudTd>@context.Descrizione</MudTd>
+        <MudTd>
+            <MudChip T="string" Size="Size.Small">@context.AliquotaCodice @(context.AliquotaPercentuale > 0 ? $"({context.AliquotaPercentuale:0}%)" : "")</MudChip>
+        </MudTd>
+        <MudTd Style="text-align:right; font-family: monospace;">@FormatCurrency(context.Imponibile)</MudTd>
+        <MudTd Style="text-align:right; font-family: monospace;">@FormatCurrency(context.Imposta)</MudTd>
+        <MudTd Style="text-align:right; font-family: monospace; font-weight: 600;">@FormatCurrency(context.Lordo)</MudTd>
+    </RowTemplate>
+    <FooterContent>
+        <MudTFootRow>
+            <MudTd colspan="7" Style="text-align:right; font-weight: 600;">Totali</MudTd>
+            <MudTd Style="text-align:right; font-family: monospace; font-weight: 700;">@FormatCurrency(Righe.Sum(r => r.Imponibile))</MudTd>
+            <MudTd Style="text-align:right; font-family: monospace; font-weight: 700;">@FormatCurrency(Righe.Sum(r => r.Imposta))</MudTd>
+            <MudTd Style="text-align:right; font-family: monospace; font-weight: 700;">@FormatCurrency(Righe.Sum(r => r.Lordo))</MudTd>
+        </MudTFootRow>
+    </FooterContent>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2" Class="pa-6">Nessun movimento con IVA in questo periodo.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private static readonly CultureInfo ItCulture = new("it-IT");
+
+    [Parameter] public IReadOnlyList<RegistroIvaRigaDto> Righe { get; set; } = Array.Empty<RegistroIvaRigaDto>();
+
+    [Parameter] public bool Loading { get; set; }
+
+    private static string FormatCurrency(decimal v) => v.ToString("N2", ItCulture);
+}

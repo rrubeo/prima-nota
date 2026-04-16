@@ -1,0 +1,171 @@
+@page "/iva/liquidazione"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.Esercizi
+@using PrimaNota.Application.Iva
+@using PrimaNota.Domain.Iva
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+
+<PageTitle>Liquidazione IVA · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Liquidazione periodica IVA</MudText>
+
+@if (loadingConfig)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (config is null)
+{
+    <MudAlert Severity="Severity.Warning">Configurazione IVA dell'esercizio non trovata.</MudAlert>
+}
+else if (config.Regime == RegimeIva.Forfettario)
+{
+    <MudAlert Severity="Severity.Info">
+        L'esercizio @Esercizio.Anno è in regime <strong>forfettario</strong>: non è prevista liquidazione IVA.
+        Il reddito imponibile si determinerà applicando il coefficiente di redditività
+        (@config.CoefficienteRedditivitaForfettario%) ai ricavi e sottraendo i contributi
+        previdenziali. (Calcolo automatico previsto in una fase successiva.)
+    </MudAlert>
+}
+else
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="0">
+        <MudGrid>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="int" Value="periodoIndice" ValueChanged="OnPeriodoChanged" Label="Periodo">
+                    @foreach (var p in IvaPeriodo.Elenco(Esercizio.Anno, config.Periodicita))
+                    {
+                        <MudSelectItem Value="@p.Indice">@p.Label</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="8" Class="d-flex align-center">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Periodicità: <strong>@config.Periodicita</strong>
+                </MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (liquidazione is not null)
+    {
+        <MudGrid Spacing="3" Class="mb-4">
+            <MudItem xs="12" sm="4">
+                <div class="pn-kpi-card">
+                    <div class="pn-kpi-icon pn-icon-red">
+                        <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Large" />
+                    </div>
+                    <div class="pn-kpi-body">
+                        <div class="pn-kpi-label">IVA a debito</div>
+                        <div class="pn-kpi-value">@FormatCurrency(liquidazione.IvaDebito)</div>
+                        <div class="pn-kpi-sub">Vendite + corrispettivi del periodo</div>
+                    </div>
+                </div>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <div class="pn-kpi-card">
+                    <div class="pn-kpi-icon pn-icon-blue">
+                        <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Large" />
+                    </div>
+                    <div class="pn-kpi-body">
+                        <div class="pn-kpi-label">IVA a credito detraibile</div>
+                        <div class="pn-kpi-value">@FormatCurrency(liquidazione.IvaCreditoDetraibile)</div>
+                        <div class="pn-kpi-sub">Totale @FormatCurrency(liquidazione.IvaCreditoTotale) · indetraibile @FormatCurrency(liquidazione.IvaCreditoIndetraibile)</div>
+                    </div>
+                </div>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <div class="pn-kpi-card">
+                    <div class="pn-kpi-icon @(liquidazione.SaldoFinale >= 0 ? "pn-icon-red" : "pn-icon-indigo")">
+                        <MudIcon Icon="@Icons.Material.Filled.Calculate" Size="Size.Large" />
+                    </div>
+                    <div class="pn-kpi-body">
+                        <div class="pn-kpi-label">Saldo finale</div>
+                        <div class="pn-kpi-value">
+                            @if (liquidazione.SaldoFinale >= 0)
+                            {
+                                <span>@FormatCurrency(liquidazione.SaldoFinale)</span>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-2">a debito</MudChip>
+                            }
+                            else
+                            {
+                                <span>@FormatCurrency(-liquidazione.SaldoFinale)</span>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ml-2">a credito</MudChip>
+                            }
+                        </div>
+                        <div class="pn-kpi-sub">Credito riportato dai periodi precedenti: @FormatCurrency(liquidazione.CreditoRiportato)</div>
+                    </div>
+                </div>
+            </MudItem>
+        </MudGrid>
+
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            Questa liquidazione è un <strong>calcolo gestionale</strong> a supporto del commercialista, non un
+            adempimento fiscale. I versamenti F24 ufficiali devono essere effettuati secondo le scadenze di
+            legge sulla base dei registri IVA trasmessi dal commercialista.
+        </MudAlert>
+    }
+}
+
+<style>
+    .pn-kpi-card { background: #fff; border: 1px solid #f3f4f6; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); padding: 1.25rem; display: flex; align-items: center; gap: 1rem; min-height: 100%; }
+    .pn-kpi-icon { width: 3rem; height: 3rem; border-radius: 9999px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .pn-icon-indigo { background: #eef2ff; color: #6366f1; }
+    .pn-icon-blue   { background: #eff6ff; color: #3b82f6; }
+    .pn-icon-red    { background: #fef2f2; color: #f87171; }
+    .pn-kpi-body { flex: 1; }
+    .pn-kpi-label { color: #6b7280; font-size: .875rem; font-weight: 500; margin-bottom: .25rem; }
+    .pn-kpi-sub   { color: #6b7280; font-size: .75rem; margin-top: .25rem; }
+    .pn-kpi-value { display: flex; align-items: baseline; gap: .5rem; font-size: 1.5rem; font-weight: 700; color: #111827; }
+</style>
+
+@code {
+    private static readonly CultureInfo ItCulture = new("it-IT");
+
+    private bool loadingConfig = true;
+    private bool loading;
+    private EsercizioIvaConfigDto? config;
+    private int periodoIndice = 1;
+    private LiquidazioneIvaDto? liquidazione;
+
+    protected override async Task OnInitializedAsync()
+    {
+        config = await Mediator.Send(new GetEsercizioIvaConfig(Esercizio.Anno));
+        loadingConfig = false;
+
+        if (config is not null && config.Regime == RegimeIva.Ordinario)
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private async Task OnPeriodoChanged(int idx)
+    {
+        periodoIndice = idx;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (config is null) return;
+        loading = true;
+        try
+        {
+            var periodo = new IvaPeriodo(Esercizio.Anno, config.Periodicita, periodoIndice);
+            liquidazione = await Mediator.Send(new GetLiquidazioneIva(periodo));
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private static string FormatCurrency(decimal v) => v.ToString("N2", ItCulture) + " €";
+}
