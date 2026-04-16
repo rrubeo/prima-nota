@@ -1,0 +1,19 @@
+@page "/Account/AccessDenied"
+@layout EmptyLayout
+
+<PageTitle>Accesso negato · Prima Nota</PageTitle>
+
+<div class="access-denied-shell">
+    <div class="panel">
+        <h1>Accesso negato</h1>
+        <p>Non hai i permessi necessari per visualizzare questa pagina.</p>
+        <a class="link" href="/">Torna alla home</a>
+    </div>
+</div>
+
+<style>
+    .access-denied-shell { display:flex; align-items:center; justify-content:center; min-height:100vh; background:#f4f6fb; }
+    .panel { background:#fff; padding:2.5rem; border-radius:12px; box-shadow:0 10px 40px rgba(0,0,0,.08); text-align:center; width:min(420px, 92vw); }
+    .panel h1 { margin-top:0; color:#991b1b; }
+    .link { display:inline-block; margin-top:1rem; color:#2563eb; text-decoration:none; font-weight:500; }
+</style>

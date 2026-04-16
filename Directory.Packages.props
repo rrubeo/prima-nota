@@ -20,6 +20,25 @@
     <PackageVersion Include="Microsoft.AspNetCore.Diagnostics.HealthChecks" Version="10.0.0" />
   </ItemGroup>
 
+  <ItemGroup Label="BackgroundJobs">
+    <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.21" />
+    <PackageVersion Include="Hangfire.SqlServer" Version="1.8.21" />
+    <PackageVersion Include="Hangfire.NetCore" Version="1.8.21" />
+    <!-- Hangfire 1.8.x pulls Newtonsoft.Json 11.0.1 transitively, which has a HIGH CVE.
+         Pin 13.0.3 to override the transitive resolution. -->
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="UI">
+    <PackageVersion Include="MudBlazor" Version="8.10.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Identity">
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.UI" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.Google" Version="10.0.0" />
+  </ItemGroup>
+
   <ItemGroup Label="EntityFrameworkCore">
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0" />

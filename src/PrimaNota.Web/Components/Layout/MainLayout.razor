@@ -1,9 +1,96 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
-@Body
+<MudThemeProvider IsDarkMode="false" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<AuthorizeView>
+    <Authorized>
+        <MudLayout>
+            <MudAppBar Elevation="1" Color="Color.Primary">
+                <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                               Color="Color.Inherit"
+                               Edge="Edge.Start"
+                               OnClick="ToggleDrawer" />
+                <MudText Typo="Typo.h6" Class="ml-2">Prima Nota</MudText>
+
+                <MudSpacer />
+
+                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled">
+                    Esercizio @CurrentYear
+                </MudChip>
+
+                <MudMenu Icon="@Icons.Material.Filled.AccountCircle"
+                         Color="Color.Inherit"
+                         AnchorOrigin="Origin.BottomRight"
+                         TransformOrigin="Origin.TopRight">
+                    <div class="px-4 py-2">
+                        <MudText Typo="Typo.subtitle2">@context.User.Identity?.Name</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @string.Join(", ", context.User.Claims
+                                .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role)
+                                .Select(c => c.Value))
+                        </MudText>
+                    </div>
+                    <MudDivider />
+                    <form method="post" action="/Account/Logout">
+                        <button type="submit" class="mud-menu-logout-button">
+                            <MudIcon Icon="@Icons.Material.Filled.Logout" Size="Size.Small" Class="mr-2" />
+                            Esci
+                        </button>
+                    </form>
+                </MudMenu>
+            </MudAppBar>
+
+            <MudDrawer @bind-Open="drawerOpen"
+                       Elevation="2"
+                       Variant="DrawerVariant.Responsive"
+                       Breakpoint="Breakpoint.Md"
+                       ClipMode="DrawerClipMode.Always">
+                <MudDrawerHeader Class="pa-4">
+                    <MudText Typo="Typo.h6">Menu</MudText>
+                </MudDrawerHeader>
+                <NavMenu />
+            </MudDrawer>
+
+            <MudMainContent Class="pt-16 pa-4">
+                <MudContainer MaxWidth="MaxWidth.False" Class="mt-4">
+                    @Body
+                </MudContainer>
+            </MudMainContent>
+        </MudLayout>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
 
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
+    Si è verificato un errore imprevisto.
+    <a href="." class="reload">Ricarica</a>
     <span class="dismiss">🗙</span>
 </div>
+
+<style>
+    .mud-menu-logout-button {
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: 0;
+        padding: .6rem 1rem;
+        cursor: pointer;
+        color: inherit;
+        font: inherit;
+        display: flex;
+        align-items: center;
+    }
+    .mud-menu-logout-button:hover { background: var(--mud-palette-action-default-hover, #f5f5f5); }
+</style>
+
+@code {
+    private bool drawerOpen = true;
+
+    private int CurrentYear => DateTime.UtcNow.Year;
+
+    private void ToggleDrawer() => drawerOpen = !drawerOpen;
+}

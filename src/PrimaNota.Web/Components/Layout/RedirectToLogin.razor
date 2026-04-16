@@ -1,0 +1,15 @@
+@inject NavigationManager Navigation
+
+@code {
+    protected override void OnInitialized()
+    {
+        var currentPath = Navigation.ToBaseRelativePath(Navigation.Uri);
+        if (currentPath.StartsWith("Account/Login", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var returnUrl = Uri.EscapeDataString("/" + currentPath);
+        Navigation.NavigateTo($"/Account/Login?returnUrl={returnUrl}", forceLoad: true);
+    }
+}

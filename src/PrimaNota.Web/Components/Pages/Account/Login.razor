@@ -1,0 +1,90 @@
+@page "/Account/Login"
+@layout EmptyLayout
+@using Microsoft.AspNetCore.Authentication.Google
+@using Microsoft.Extensions.Options
+@using PrimaNota.Infrastructure.Configuration
+@inject IOptions<GoogleAuthenticationOptions> GoogleOptions
+
+<PageTitle>Accedi · Prima Nota</PageTitle>
+
+<div class="login-shell">
+    <div class="login-card">
+        <h1>Prima Nota Aziendale</h1>
+        <p class="subtitle">Accedi con le tue credenziali</p>
+
+        @if (!string.IsNullOrEmpty(Error))
+        {
+            <div class="alert alert-error" role="alert">
+                @ErrorMessage(Error)
+            </div>
+        }
+
+        <form method="post" action="/Account/Login" class="login-form">
+            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+
+            <label>
+                <span>Email</span>
+                <input type="email" name="email" autocomplete="username" required />
+            </label>
+
+            <label>
+                <span>Password</span>
+                <input type="password" name="password" autocomplete="current-password" required />
+            </label>
+
+            <label class="inline">
+                <input type="checkbox" name="rememberMe" value="true" />
+                <span>Ricordami</span>
+            </label>
+
+            <button type="submit" class="btn-primary">Accedi</button>
+        </form>
+
+        @if (GoogleOptions.Value.IsConfigured)
+        {
+            <div class="divider">oppure</div>
+
+            <a class="btn-google"
+               href="@($"/Account/ExternalLogin?provider={GoogleDefaults.AuthenticationScheme}&returnUrl={Uri.EscapeDataString(ReturnUrl ?? "/")}")">
+                Accedi con Google
+            </a>
+        }
+    </div>
+</div>
+
+<style>
+    .login-shell { display:flex; align-items:center; justify-content:center; min-height:100vh; background:#f4f6fb; }
+    .login-card { background:#fff; border-radius:12px; box-shadow:0 10px 40px rgba(0,0,0,.08); padding:2.5rem; width:min(420px, 92vw); }
+    .login-card h1 { margin:0 0 .25rem; font-size:1.5rem; }
+    .subtitle { margin:0 0 1.5rem; color:#6b7280; }
+    .login-form label { display:block; margin-bottom:1rem; }
+    .login-form label.inline { display:flex; align-items:center; gap:.5rem; }
+    .login-form input[type=email], .login-form input[type=password] {
+        width:100%; padding:.6rem .75rem; border:1px solid #d1d5db; border-radius:8px; font-size:1rem;
+    }
+    .btn-primary { width:100%; padding:.75rem; background:#2563eb; color:#fff; border:0; border-radius:8px; font-weight:600; cursor:pointer; }
+    .btn-primary:hover { background:#1d4ed8; }
+    .divider { text-align:center; margin:1.5rem 0; color:#9ca3af; }
+    .btn-google { display:block; text-align:center; padding:.75rem; background:#fff; color:#111; border:1px solid #d1d5db; border-radius:8px; text-decoration:none; font-weight:500; }
+    .btn-google:hover { background:#f9fafb; }
+    .alert-error { background:#fee2e2; color:#991b1b; padding:.75rem; border-radius:8px; margin-bottom:1rem; font-size:.95rem; }
+</style>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+
+    private static string ErrorMessage(string code) => code switch
+    {
+        "missing" => "Inserisci email e password.",
+        "invalid" => "Credenziali non valide.",
+        "lockout" => "Troppi tentativi falliti. L'account e bloccato temporaneamente.",
+        "notallowed" => "L'account non e autorizzato ad accedere.",
+        "external_failed" => "Accesso con provider esterno fallito.",
+        "external_no_email" => "Il provider esterno non ha fornito un indirizzo email.",
+        "external_not_provisioned" => "Questo indirizzo non e associato a nessun utente attivo del sistema.",
+        "external_link_failed" => "Collegamento dell'account esterno fallito.",
+        _ => "Si e verificato un errore imprevisto.",
+    };
+}

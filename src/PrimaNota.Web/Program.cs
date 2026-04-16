@@ -1,5 +1,11 @@
 using System.Globalization;
+using Hangfire;
+using MudBlazor.Services;
 using PrimaNota.Infrastructure;
+using PrimaNota.Infrastructure.BackgroundJobs;
+using PrimaNota.Infrastructure.Esercizi;
+using PrimaNota.Web.Authentication;
+using PrimaNota.Web.BackgroundJobs;
 using PrimaNota.Web.Components;
 using Serilog;
 using Serilog.Exceptions;
@@ -23,7 +29,11 @@ try
     builder.Services.AddRazorComponents()
         .AddInteractiveServerComponents();
 
+    builder.Services.AddMudServices();
+
     builder.Services.AddInfrastructure(builder.Configuration);
+    builder.Services.AddBackgroundJobs(builder.Configuration);
+    builder.Services.AddPrimaNotaAuthentication(builder.Configuration);
 
     builder.Services.AddHealthChecks()
         .AddInfrastructureHealthChecks(builder.Configuration);
@@ -41,17 +51,36 @@ try
     app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
     app.UseHttpsRedirection();
 
+    app.UseAuthentication();
+    app.UseAuthorization();
     app.UseAntiforgery();
 
     app.MapStaticAssets();
     app.MapRazorComponents<App>()
         .AddInteractiveServerRenderMode();
 
+    app.MapAccountEndpoints();
+
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = [new HangfireAdminAuthorizationFilter()],
+        DisplayStorageConnectionString = false,
+    });
+
     app.MapHealthChecks("/health");
     app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
     {
         Predicate = check => check.Tags.Contains("ready"),
     });
+
+    // Apply migrations and seed roles on startup (skippable via env var for CI/smoke tests).
+    if (!string.Equals(Environment.GetEnvironmentVariable("PRIMANOTA_SKIP_DB_INIT"), "true", StringComparison.OrdinalIgnoreCase))
+    {
+        await app.Services.InitializeInfrastructureAsync();
+
+        using var scope = app.Services.CreateScope();
+        EsercizioYearlyJob.Schedule(scope.ServiceProvider.GetRequiredService<IRecurringJobManager>());
+    }
 
     await app.RunAsync();
 }

@@ -1,10 +1,15 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using PrimaNota.Application.Abstractions;
+using PrimaNota.Application.Esercizi;
+using PrimaNota.Infrastructure.Audit;
 using PrimaNota.Infrastructure.Clock;
 using PrimaNota.Infrastructure.Configuration;
+using PrimaNota.Infrastructure.Esercizi;
 using PrimaNota.Infrastructure.Identity;
 using PrimaNota.Infrastructure.Persistence;
 using PrimaNota.Shared.Clock;
@@ -17,7 +22,7 @@ public static class DependencyInjection
     private static readonly string[] SqlServerHealthCheckTags = new[] { "ready", "db" };
 
     /// <summary>
-    /// Registers infrastructure services (DB, clock, audit, identity placeholders).
+    /// Registers infrastructure services: database, clock, identity, audit pipeline.
     /// </summary>
     /// <param name="services">The DI container.</param>
     /// <param name="configuration">The app configuration root.</param>
@@ -34,8 +39,13 @@ public static class DependencyInjection
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        services.AddOptions<IdentityBootstrapOptions>()
+            .Bind(configuration.GetSection(IdentityBootstrapOptions.SectionName))
+            .ValidateDataAnnotations();
+
+        services.AddHttpContextAccessor();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
-        services.AddScoped<ICurrentUserService, AnonymousCurrentUserService>();
+        services.AddScoped<ICurrentUserService, HttpContextCurrentUserService>();
         services.AddScoped<AuditSaveChangesInterceptor>();
 
         services.AddDbContext<AppDbContext>((provider, options) =>
@@ -53,6 +63,29 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<AppDbContext>());
+
+        services.AddIdentityCore<ApplicationUser>(options =>
+            {
+                options.User.RequireUniqueEmail = true;
+                options.Password.RequiredLength = 12;
+                options.Password.RequireDigit = true;
+                options.Password.RequireLowercase = true;
+                options.Password.RequireUppercase = true;
+                options.Password.RequireNonAlphanumeric = true;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+                options.SignIn.RequireConfirmedAccount = false;
+            })
+            .AddRoles<ApplicationRole>()
+            .AddEntityFrameworkStores<AppDbContext>()
+            .AddSignInManager()
+            .AddDefaultTokenProviders();
+
+        services.AddScoped<IdentitySeeder>();
+        services.AddScoped<IEsercizioContext, EsercizioContext>();
+        services.AddScoped<EsercizioRegistrationService>();
+        services.AddScoped<EsercizioYearlyJob>();
+        services.AddScoped<IAuditLogger, AuditLogger>();
 
         return services;
     }
@@ -76,5 +109,31 @@ public static class DependencyInjection
             name: "sqlserver",
             failureStatus: HealthStatus.Unhealthy,
             tags: SqlServerHealthCheckTags);
+    }
+
+    /// <summary>
+    /// Applies pending EF migrations (if any) and seeds roles and bootstrap admin.
+    /// Intended to be called at application startup.
+    /// </summary>
+    /// <param name="services">The service provider of the running host.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task that completes when initialization is done.</returns>
+    public static async Task InitializeInfrastructureAsync(
+        this IServiceProvider services,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        await using var scope = services.CreateAsyncScope();
+        var provider = scope.ServiceProvider;
+
+        var db = provider.GetRequiredService<AppDbContext>();
+        await db.Database.MigrateAsync(cancellationToken);
+
+        var seeder = provider.GetRequiredService<IdentitySeeder>();
+        await seeder.SeedAsync(cancellationToken);
+
+        var esercizi = provider.GetRequiredService<EsercizioRegistrationService>();
+        await esercizi.EnsureCurrentYearAsync(cancellationToken);
     }
 }

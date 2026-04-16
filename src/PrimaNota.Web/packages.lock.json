@@ -17,6 +17,12 @@
         "resolved": "10.0.5",
         "contentHash": "Oxw9Ps1/nd6c/EMCAI13AeJFEqXezAvCEOshMjUWmL7LeGirHJNzytR2e/3jINYg0j2TmPvNUowGHf+gp8zDSQ=="
       },
+      "Microsoft.AspNetCore.Authentication.Google": {
+        "type": "Direct",
+        "requested": "[10.0.0, )",
+        "resolved": "10.0.0",
+        "contentHash": "EVpdUZGl7pVeJcQatS+yx5YE2x+lW9ZXO3iG6r9okTcE7XlEimBKW40n8BXk38/lfJ1lRcq4Hv3cWCj5cr32Kw=="
+      },
       "Microsoft.EntityFrameworkCore.Design": {
         "type": "Direct",
         "requested": "[10.0.0, )",
@@ -35,6 +41,12 @@
           "Mono.TextTemplating": "3.0.0",
           "Newtonsoft.Json": "13.0.3"
         }
+      },
+      "MudBlazor": {
+        "type": "Direct",
+        "requested": "[8.10.0, )",
+        "resolved": "8.10.0",
+        "contentHash": "kEBD4Oq/+5ZfE1uuk280Wkocy1BHKyLDoIA7s190F9u37Gb0L3QItAItAXBa01BEJLPy2estV6pmfe+/UnLGUA=="
       },
       "Serilog.AspNetCore": {
         "type": "Direct",
@@ -140,6 +152,14 @@
           "Azure.Core": "1.46.1",
           "Microsoft.Identity.Client": "4.73.1",
           "Microsoft.Identity.Client.Extensions.Msal": "4.73.1"
+        }
+      },
+      "Hangfire.Core": {
+        "type": "Transitive",
+        "resolved": "1.8.21",
+        "contentHash": "UfIDfDKJTue82ShKV/HHEBScAIJMnuiS8c5jcLHThY8i8O0eibCcNjFkVqlvY9cnDiOBZ7EBGWJ8horH9Ykq+g==",
+        "dependencies": {
+          "Newtonsoft.Json": "11.0.1"
         }
       },
       "Humanizer.Core": {
@@ -387,11 +407,6 @@
           "System.CodeDom": "6.0.0"
         }
       },
-      "Newtonsoft.Json": {
-        "type": "Transitive",
-        "resolved": "13.0.3",
-        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
-      },
       "Serilog.Extensions.Hosting": {
         "type": "Transitive",
         "resolved": "9.0.0",
@@ -577,6 +592,10 @@
         "type": "Project",
         "dependencies": {
           "AspNetCore.HealthChecks.SqlServer": "[9.0.0, )",
+          "Hangfire.AspNetCore": "[1.8.21, )",
+          "Hangfire.NetCore": "[1.8.21, )",
+          "Hangfire.SqlServer": "[1.8.21, )",
+          "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.0, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.0, )",
           "Microsoft.EntityFrameworkCore.SqlServer": "[10.0.0, )",
@@ -587,6 +606,42 @@
       },
       "primanota.shared": {
         "type": "Project"
+      },
+      "Hangfire.AspNetCore": {
+        "type": "CentralTransitive",
+        "requested": "[1.8.21, )",
+        "resolved": "1.8.21",
+        "contentHash": "G3yP92rPC313zRA1DIaROmF6UYB9NRtMHy64CCq4StqWmyUuFQQsYgZxo+Kp6gd2CbjaSI8JN8canTMYSGfrMw==",
+        "dependencies": {
+          "Hangfire.NetCore": "[1.8.21]"
+        }
+      },
+      "Hangfire.NetCore": {
+        "type": "CentralTransitive",
+        "requested": "[1.8.21, )",
+        "resolved": "1.8.21",
+        "contentHash": "NR8BvQqgvVstgY/YZVisuV/XdkKSZGiD+5b+NABuGxu/xDEhycFHS1uIC9zhIYkPr1tThGoThRIH07JWxPZTvQ==",
+        "dependencies": {
+          "Hangfire.Core": "[1.8.21]"
+        }
+      },
+      "Hangfire.SqlServer": {
+        "type": "CentralTransitive",
+        "requested": "[1.8.21, )",
+        "resolved": "1.8.21",
+        "contentHash": "uGz9yfyC9hrI4zGWQivpdOv4tLlueKRc1tYN/+/NcsAcW3ciN0fmG4OPpCb7je0+7z/SGBGDpzNrXUiF2x7rHQ==",
+        "dependencies": {
+          "Hangfire.Core": "[1.8.21]"
+        }
+      },
+      "Microsoft.AspNetCore.Identity.EntityFrameworkCore": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.0, )",
+        "resolved": "10.0.0",
+        "contentHash": "mH1+58nbX5RWSd8hajSnXSdpQ1MN3oca488Zd+DvKX2nPTAyTVNRzubMV06BmPcjOZ9waLr/AjwcNiCQ8bCscQ==",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore.Relational": "10.0.0"
+        }
       },
       "Microsoft.EntityFrameworkCore": {
         "type": "CentralTransitive",
@@ -616,6 +671,12 @@
           "Microsoft.Data.SqlClient": "6.1.1",
           "Microsoft.EntityFrameworkCore.Relational": "10.0.0"
         }
+      },
+      "Newtonsoft.Json": {
+        "type": "CentralTransitive",
+        "requested": "[13.0.3, )",
+        "resolved": "13.0.3",
+        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
       },
       "Serilog": {
         "type": "CentralTransitive",

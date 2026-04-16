@@ -58,6 +58,12 @@ dotnet_diagnostic.SA1516.severity = none
 # CA1716: namespace conflicts with VB.NET keywords — we do not target VB
 dotnet_diagnostic.CA1716.severity = none
 
+# CA1848: LoggerMessage.Define vs extension methods — performance win is negligible for this app scale
+dotnet_diagnostic.CA1848.severity = none
+
+# CA1873: avoid expensive argument eval when log level disabled — same rationale as CA1848
+dotnet_diagnostic.CA1873.severity = none
+
 [**/Migrations/*.cs]
 generated_code = true
 dotnet_analyzer_diagnostic.severity = none
