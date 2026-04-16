@@ -41,7 +41,7 @@
                     <ActivatorContent>
                         <MudButton Variant="Variant.Text"
                                    Color="Color.Inherit"
-                                   DisableElevation="true"
+                                   DropShadow="false"
                                    Class="pn-profile-btn">
                             <MudAvatar Size="Size.Small" Class="pn-avatar">@Initials(context.User)</MudAvatar>
                             <span class="pn-profile-name ml-2">@(context.User.Identity?.Name ?? "Utente")</span>
