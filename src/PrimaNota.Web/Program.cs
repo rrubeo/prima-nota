@@ -1,6 +1,7 @@
 using System.Globalization;
 using Hangfire;
 using MudBlazor.Services;
+using PrimaNota.Application;
 using PrimaNota.Infrastructure;
 using PrimaNota.Infrastructure.BackgroundJobs;
 using PrimaNota.Infrastructure.Esercizi;
@@ -31,6 +32,7 @@ try
 
     builder.Services.AddMudServices();
 
+    builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
     builder.Services.AddBackgroundJobs(builder.Configuration);
     builder.Services.AddPrimaNotaAuthentication(builder.Configuration);

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using PrimaNota.Application.Abstractions;
+using PrimaNota.Domain.Anagrafiche;
 using PrimaNota.Infrastructure.Identity;
 
 namespace PrimaNota.Infrastructure.Persistence;
@@ -19,6 +20,9 @@ public sealed class AppDbContext
         : base(options)
     {
     }
+
+    /// <summary>Gets the <see cref="Anagrafica"/> set.</summary>
+    public DbSet<Anagrafica> Anagrafiche => Set<Anagrafica>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)

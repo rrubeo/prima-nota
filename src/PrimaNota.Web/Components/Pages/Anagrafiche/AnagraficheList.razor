@@ -1,0 +1,158 @@
+@page "/anagrafiche"
+@page "/anagrafiche/{Ruolo}"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using MediatR
+@using PrimaNota.Application.Anagrafiche
+@inject IMediator Mediator
+@inject NavigationManager Navigation
+
+<PageTitle>Anagrafiche · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">@Title</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="0">
+    <MudGrid>
+        <MudItem xs="12" sm="4">
+            <MudTextField T="string"
+                          Label="Cerca (ragione sociale, CF, P.IVA)"
+                          @bind-Value="search"
+                          @bind-Value:after="ReloadAsync"
+                          Clearable="true"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" />
+        </MudItem>
+        <MudItem xs="12" sm="3">
+            <MudSelect T="AnagraficaRuoloFilter"
+                       Label="Ruolo"
+                       @bind-Value="ruoloFilter"
+                       @bind-Value:after="ReloadAsync">
+                <MudSelectItem Value="AnagraficaRuoloFilter.Tutti">Tutti</MudSelectItem>
+                <MudSelectItem Value="AnagraficaRuoloFilter.Clienti">Clienti</MudSelectItem>
+                <MudSelectItem Value="AnagraficaRuoloFilter.Fornitori">Fornitori</MudSelectItem>
+                <MudSelectItem Value="AnagraficaRuoloFilter.Dipendenti">Dipendenti</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="3" Class="d-flex align-center">
+            <MudCheckBox T="bool"
+                         @bind-Value="includiNonAttive"
+                         @bind-Value:after="ReloadAsync"
+                         Label="Includi non attive" />
+        </MudItem>
+        <MudItem xs="12" sm="2" Class="d-flex align-center justify-end">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => Navigation.NavigateTo("/anagrafiche/nuova"))">
+                Nuova
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudTable Items="items"
+          Hover="true"
+          Dense="true"
+          Loading="loading"
+          Striped="true"
+          Class="mt-2">
+    <HeaderContent>
+        <MudTh>Ragione sociale</MudTh>
+        <MudTh>CF</MudTh>
+        <MudTh>P.IVA</MudTh>
+        <MudTh>Ruoli</MudTh>
+        <MudTh>Contatti</MudTh>
+        <MudTh>Stato</MudTh>
+        <MudTh Style="width: 120px;">Azioni</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.RagioneSociale</MudTd>
+        <MudTd>@context.CodiceFiscale</MudTd>
+        <MudTd>@context.PartitaIva</MudTd>
+        <MudTd>
+            @if (context.IsCliente)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Info">Cliente</MudChip>
+            }
+            @if (context.IsFornitore)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning">Fornitore</MudChip>
+            }
+            @if (context.IsDipendente)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success">Dipendente</MudChip>
+            }
+        </MudTd>
+        <MudTd>
+            @if (!string.IsNullOrWhiteSpace(context.Email))
+            {
+                <MudText Typo="Typo.caption">@context.Email</MudText><br />
+            }
+            @if (!string.IsNullOrWhiteSpace(context.Telefono))
+            {
+                <MudText Typo="Typo.caption">@context.Telefono</MudText>
+            }
+        </MudTd>
+        <MudTd>
+            @if (context.Attivo)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">Attiva</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Non attiva</MudChip>
+            }
+        </MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                           Color="Color.Primary"
+                           Size="Size.Small"
+                           OnClick="@(() => Navigation.NavigateTo($"/anagrafiche/{context.Id}"))" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>Nessuna anagrafica trovata.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    [Parameter] public string? Ruolo { get; set; }
+
+    private string? search;
+    private AnagraficaRuoloFilter ruoloFilter = AnagraficaRuoloFilter.Tutti;
+    private bool includiNonAttive;
+    private bool loading;
+    private IReadOnlyList<AnagraficaListItemDto> items = Array.Empty<AnagraficaListItemDto>();
+
+    private string Title => ruoloFilter switch
+    {
+        AnagraficaRuoloFilter.Clienti => "Clienti",
+        AnagraficaRuoloFilter.Fornitori => "Fornitori",
+        AnagraficaRuoloFilter.Dipendenti => "Dipendenti",
+        _ => "Anagrafiche"
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ruoloFilter = Ruolo?.ToLowerInvariant() switch
+        {
+            "clienti" => AnagraficaRuoloFilter.Clienti,
+            "fornitori" => AnagraficaRuoloFilter.Fornitori,
+            "dipendenti" => AnagraficaRuoloFilter.Dipendenti,
+            _ => AnagraficaRuoloFilter.Tutti
+        };
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        loading = true;
+        try
+        {
+            items = await Mediator.Send(new ListAnagrafiche(ruoloFilter, includiNonAttive, search));
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

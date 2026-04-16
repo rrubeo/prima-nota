@@ -1,0 +1,262 @@
+@page "/anagrafiche/nuova"
+@page "/anagrafiche/{Id:guid}"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using MediatR
+@using PrimaNota.Application.Anagrafiche
+@using PrimaNota.Application.Anagrafiche.Upsert
+@inject IMediator Mediator
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@Title · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">@Title</MudText>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudForm @ref="form" Model="model" Validation="Validator" ValidationDelay="0">
+        <MudPaper Class="pa-4 mb-4" Elevation="0">
+            <MudText Typo="Typo.h6" GutterBottom="true">Identificazione</MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="8">
+                    <MudTextField @bind-Value="model.RagioneSociale"
+                                  Label="Ragione sociale / Nome completo"
+                                  Required="true"
+                                  For="@(() => model.RagioneSociale)" />
+                </MudItem>
+                <MudItem xs="12" sm="4" Class="d-flex align-center">
+                    <MudCheckBox T="bool" @bind-Value="model.PersonaFisica" Label="Persona fisica" />
+                </MudItem>
+
+                @if (model.PersonaFisica)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="model.Nome" Label="Nome" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="model.Cognome" Label="Cognome" />
+                    </MudItem>
+                }
+
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="model.CodiceFiscale" Label="Codice fiscale" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="model.PartitaIva" Label="Partita IVA" />
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mb-4" Elevation="0">
+            <MudText Typo="Typo.h6" GutterBottom="true">Ruoli</MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="4">
+                    <MudCheckBox T="bool" @bind-Value="model.IsCliente" Label="Cliente" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudCheckBox T="bool" @bind-Value="model.IsFornitore" Label="Fornitore" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudCheckBox T="bool" @bind-Value="model.IsDipendente" Label="Dipendente" />
+                </MudItem>
+
+                @if (model.IsDipendente)
+                {
+                    <MudItem xs="12" sm="4">
+                        <MudTextField @bind-Value="model.Mansione" Label="Mansione" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudDatePicker Label="Data assunzione"
+                                       Date="@DateOnlyToDate(model.DataAssunzione)"
+                                       DateChanged="d => model = model with { DataAssunzione = DateToDateOnly(d) }" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudDatePicker Label="Data cessazione"
+                                       Date="@DateOnlyToDate(model.DataCessazione)"
+                                       DateChanged="d => model = model with { DataCessazione = DateToDateOnly(d) }" />
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mb-4" Elevation="0">
+            <MudText Typo="Typo.h6" GutterBottom="true">Contatti</MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="4"><MudTextField @bind-Value="model.Email" Label="Email" InputType="InputType.Email" /></MudItem>
+                <MudItem xs="12" sm="4"><MudTextField @bind-Value="model.Telefono" Label="Telefono" /></MudItem>
+                <MudItem xs="12" sm="4"><MudTextField @bind-Value="model.Pec" Label="PEC" InputType="InputType.Email" /></MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mb-4" Elevation="0">
+            <MudText Typo="Typo.h6" GutterBottom="true">Indirizzo</MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="6"><MudTextField @bind-Value="model.IndirizzoVia" Label="Via e civico" /></MudItem>
+                <MudItem xs="6" sm="2"><MudTextField @bind-Value="model.IndirizzoCap" Label="CAP" /></MudItem>
+                <MudItem xs="6" sm="3"><MudTextField @bind-Value="model.IndirizzoCitta" Label="Città" /></MudItem>
+                <MudItem xs="6" sm="1"><MudTextField @bind-Value="model.IndirizzoProvincia" Label="Prov." /></MudItem>
+                <MudItem xs="6" sm="2"><MudTextField @bind-Value="model.IndirizzoCountryCode" Label="Paese" /></MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mb-4" Elevation="0">
+            <MudTextField @bind-Value="model.Note" Label="Note" Lines="3" />
+        </MudPaper>
+
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="saving">
+                Salva
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" OnClick='() => Navigation.NavigateTo("/anagrafiche")'>
+                Annulla
+            </MudButton>
+            @if (Id.HasValue && attivo)
+            {
+                <MudSpacer />
+                <MudButton Variant="Variant.Outlined" Color="Color.Warning" StartIcon="@Icons.Material.Filled.Block" OnClick="DeactivateAsync">
+                    Disattiva
+                </MudButton>
+            }
+            else if (Id.HasValue && !attivo)
+            {
+                <MudSpacer />
+                <MudButton Variant="Variant.Outlined" Color="Color.Success" StartIcon="@Icons.Material.Filled.CheckCircle" OnClick="ActivateAsync">
+                    Riattiva
+                </MudButton>
+            }
+        </MudStack>
+    </MudForm>
+}
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private AnagraficaInput model = new();
+    private MudForm? form;
+    private bool loading;
+    private bool saving;
+    private bool attivo = true;
+
+    private string Title => Id.HasValue ? "Modifica anagrafica" : "Nuova anagrafica";
+
+    private readonly AnagraficaInputValidator validator = new();
+
+    private Func<object, string, Task<IEnumerable<string>>> Validator => async (obj, prop) =>
+    {
+        var result = await validator.ValidateAsync(model);
+        return result.Errors
+            .Where(e => e.PropertyName == prop)
+            .Select(e => e.ErrorMessage);
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Id.HasValue)
+        {
+            model = new AnagraficaInput { IndirizzoCountryCode = "IT" };
+            attivo = true;
+            return;
+        }
+
+        loading = true;
+        try
+        {
+            var dto = await Mediator.Send(new GetAnagrafica(Id.Value));
+            if (dto is null)
+            {
+                Snackbar.Add("Anagrafica non trovata.", Severity.Error);
+                Navigation.NavigateTo("/anagrafiche");
+                return;
+            }
+
+            attivo = dto.Attivo;
+            model = new AnagraficaInput
+            {
+                RagioneSociale = dto.RagioneSociale,
+                Nome = dto.Nome,
+                Cognome = dto.Cognome,
+                CodiceFiscale = dto.CodiceFiscale,
+                PartitaIva = dto.PartitaIva,
+                PersonaFisica = dto.PersonaFisica,
+                IsCliente = dto.IsCliente,
+                IsFornitore = dto.IsFornitore,
+                IsDipendente = dto.IsDipendente,
+                Mansione = dto.Mansione,
+                DataAssunzione = dto.DataAssunzione,
+                DataCessazione = dto.DataCessazione,
+                Email = dto.Email,
+                Telefono = dto.Telefono,
+                Pec = dto.Pec,
+                IndirizzoVia = dto.IndirizzoVia,
+                IndirizzoCap = dto.IndirizzoCap,
+                IndirizzoCitta = dto.IndirizzoCitta,
+                IndirizzoProvincia = dto.IndirizzoProvincia,
+                IndirizzoCountryCode = dto.IndirizzoCountryCode,
+                Note = dto.Note,
+            };
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (form is null) return;
+        await form.Validate();
+        if (!form.IsValid)
+        {
+            Snackbar.Add("Correggi gli errori evidenziati.", Severity.Warning);
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            if (Id.HasValue)
+            {
+                await Mediator.Send(new UpdateAnagrafica(Id.Value, model));
+                Snackbar.Add("Anagrafica aggiornata.", Severity.Success);
+            }
+            else
+            {
+                var newId = await Mediator.Send(new CreateAnagrafica(model));
+                Snackbar.Add("Anagrafica creata.", Severity.Success);
+                Navigation.NavigateTo($"/anagrafiche/{newId}");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task DeactivateAsync()
+    {
+        if (!Id.HasValue) return;
+        await Mediator.Send(new ToggleAnagraficaActivation(Id.Value, false));
+        attivo = false;
+        Snackbar.Add("Anagrafica disattivata.", Severity.Info);
+    }
+
+    private async Task ActivateAsync()
+    {
+        if (!Id.HasValue) return;
+        await Mediator.Send(new ToggleAnagraficaActivation(Id.Value, true));
+        attivo = true;
+        Snackbar.Add("Anagrafica riattivata.", Severity.Success);
+    }
+
+    private static DateTime? DateOnlyToDate(DateOnly? d) => d.HasValue ? d.Value.ToDateTime(TimeOnly.MinValue) : null;
+    private static DateOnly? DateToDateOnly(DateTime? d) => d.HasValue ? DateOnly.FromDateTime(d.Value) : null;
+}
