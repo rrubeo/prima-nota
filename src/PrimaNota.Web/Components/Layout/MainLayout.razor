@@ -36,15 +36,17 @@
 
                 <MudMenu AnchorOrigin="Origin.BottomRight"
                          TransformOrigin="Origin.TopRight"
-                         Class="ml-2">
+                         Class="ml-2"
+                         Dense="true">
                     <ActivatorContent>
-                        <div class="pn-profile">
-                            <MudAvatar Size="Size.Small" Color="Color.Default" Class="pn-avatar">
-                                @Initials(context.User)
-                            </MudAvatar>
-                            <span class="pn-profile-name">@(context.User.Identity?.Name ?? "Utente")</span>
-                            <MudIcon Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" />
-                        </div>
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Inherit"
+                                   DisableElevation="true"
+                                   Class="pn-profile-btn">
+                            <MudAvatar Size="Size.Small" Class="pn-avatar">@Initials(context.User)</MudAvatar>
+                            <span class="pn-profile-name ml-2">@(context.User.Identity?.Name ?? "Utente")</span>
+                            <MudIcon Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Class="ml-1" />
+                        </MudButton>
                     </ActivatorContent>
                     <ChildContent>
                         <div class="px-4 py-2">
@@ -148,17 +150,13 @@
     .pn-search-input input { color: #111827 !important; }
     .pn-search-input .mud-input-adornment .mud-icon-default { color: #9ca3af !important; }
 
-    .pn-profile {
-        display: flex;
-        align-items: center;
-        gap: .75rem;
-        cursor: pointer;
-        padding: .25rem .5rem;
-        border-radius: 6px;
-        transition: background .15s ease;
+    .pn-profile-btn {
+        text-transform: none !important;
+        padding: .25rem .75rem !important;
+        border-radius: 8px !important;
     }
-    .pn-profile:hover { background: rgba(255,255,255,0.1); }
-    .pn-profile-name { font-size: .875rem; font-weight: 500; }
+    .pn-profile-btn:hover { background: rgba(255,255,255,0.1) !important; }
+    .pn-profile-name { font-size: .875rem; font-weight: 500; color: #fff; }
     .pn-avatar {
         background: #ffffff !important;
         color: #1a1b41 !important;
