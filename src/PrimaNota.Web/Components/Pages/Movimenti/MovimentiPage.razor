@@ -12,6 +12,7 @@
 @inject IMediator Mediator
 @inject IEsercizioContext Esercizio
 @inject NavigationManager Navigation
+@inject IDialogService Dialog
 
 <PageTitle>Movimenti · Prima Nota</PageTitle>
 
@@ -55,7 +56,12 @@
                            Date="@DateOnlyToDate(dateTo)"
                            DateChanged="d => { dateTo = DateToDateOnly(d); _ = ReloadAsync(); }" />
         </MudItem>
-        <MudItem xs="12" sm="1" Class="d-flex align-center justify-end">
+        <MudItem xs="12" sm="1" Class="d-flex align-center justify-end" Style="gap:.5rem;">
+            <MudTooltip Text="Importa fattura elettronica XML">
+                <MudIconButton Icon="@Icons.Material.Filled.UploadFile"
+                               Color="Color.Default"
+                               OnClick="OpenImportFatturaAsync" />
+            </MudTooltip>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                        OnClick='() => Navigation.NavigateTo("/movimenti/nuovo")'>
                 Nuovo
@@ -180,4 +186,16 @@
 
     private static DateTime? DateOnlyToDate(DateOnly? d) => d.HasValue ? d.Value.ToDateTime(TimeOnly.MinValue) : null;
     private static DateOnly? DateToDateOnly(DateTime? d) => d.HasValue ? DateOnly.FromDateTime(d.Value) : null;
+
+    private async Task OpenImportFatturaAsync()
+    {
+        var dlg = await Dialog.ShowAsync<ImportFatturaDialog>(
+            "Importa fattura elettronica",
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var outcome = await dlg.Result;
+        if (outcome is { Canceled: false, Data: Guid movimentoId })
+        {
+            Navigation.NavigateTo($"/movimenti/{movimentoId}");
+        }
+    }
 }

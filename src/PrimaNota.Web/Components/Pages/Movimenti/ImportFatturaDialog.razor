@@ -1,0 +1,155 @@
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.ContiFinanziari
+@using PrimaNota.Application.PrimaNota.Import
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
+            Carica un file <strong>XML di fattura elettronica</strong> (FPR12 / FPA12).
+            Il sistema crea automaticamente il movimento in bozza e, se necessario,
+            l'anagrafica della controparte (deduplicazione per P.IVA o CF).
+        </MudText>
+
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="DirezioneFattura" @bind-Value="direzione" Label="Direzione">
+                    <MudSelectItem Value="DirezioneFattura.Attiva">Attiva — fattura emessa</MudSelectItem>
+                    <MudSelectItem Value="DirezioneFattura.Passiva">Passiva — fattura ricevuta</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid" @bind-Value="contoFinanziarioId" Label="Conto finanziario" Required="true"
+                           ToStringFunc="@FormatConto">
+                    @foreach (var c in conti)
+                    {
+                        <MudSelectItem T="Guid" Value="@c.Id">@c.Codice — @c.Nome</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudFileUpload T="IBrowserFile"
+                               OnFilesChanged="OnFileSelected"
+                               Accept=".xml"
+                               Hidden="false"
+                               MaximumFileCount="1">
+                    <ActivatorContent>
+                        <MudButton HtmlTag="label"
+                                   Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.UploadFile">
+                            @(selectedFile?.Name ?? "Seleziona file XML…")
+                        </MudButton>
+                    </ActivatorContent>
+                </MudFileUpload>
+            </MudItem>
+
+            @if (result is not null)
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="Severity.Success" Class="mt-2">
+                        Movimento creato @(result.AnagraficaNuova ? "e anagrafica aggiunta" : "(anagrafica riutilizzata)").
+                        Righe: @result.RigheCreate.
+                        @if (result.AliquoteMancanti.Count > 0)
+                        {
+                            <MudText Typo="Typo.caption" Class="d-block mt-2">
+                                ⚠️ Aliquote non trovate nel sistema: @string.Join(", ", result.AliquoteMancanti).
+                                Apri il movimento e completale manualmente.
+                            </MudText>
+                        }
+                    </MudAlert>
+                </MudItem>
+            }
+
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="Severity.Error">@error</MudAlert>
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                   OnClick="ImportAsync"
+                   Disabled="@(importing || selectedFile is null || contoFinanziarioId == Guid.Empty)">
+            Importa
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private DirezioneFattura direzione = DirezioneFattura.Passiva;
+    private Guid contoFinanziarioId;
+    private IBrowserFile? selectedFile;
+    private bool importing;
+    private ImportFatturaResult? result;
+    private string? error;
+
+    private IReadOnlyList<ContoFinanziarioListItemDto> conti = Array.Empty<ContoFinanziarioListItemDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        conti = await Mediator.Send(new ListContiFinanziari(false));
+        contoFinanziarioId = conti.FirstOrDefault()?.Id ?? Guid.Empty;
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        result = null;
+        error = null;
+    }
+
+    private async Task ImportAsync()
+    {
+        if (selectedFile is null) return;
+        importing = true;
+        error = null;
+        result = null;
+        try
+        {
+            await using var stream = selectedFile.OpenReadStream(5L * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            ms.Position = 0;
+
+            result = await Mediator.Send(new ImportFatturaElettronica(
+                ms,
+                direzione,
+                contoFinanziarioId,
+                Esercizio.Anno));
+
+            Snackbar.Add($"Movimento creato da fattura elettronica ({result.RigheCreate} righe).", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(result.MovimentoId));
+        }
+        catch (FatturaElettronicaParseException ex)
+        {
+            error = $"File XML non riconosciuto: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            importing = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private string FormatConto(Guid id)
+    {
+        var c = conti.FirstOrDefault(x => x.Id == id);
+        return c is null ? string.Empty : $"{c.Codice} — {c.Nome}";
+    }
+}
