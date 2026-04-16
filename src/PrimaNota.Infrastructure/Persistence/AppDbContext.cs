@@ -5,6 +5,7 @@ using PrimaNota.Domain.Anagrafiche;
 using PrimaNota.Domain.ContiFinanziari;
 using PrimaNota.Domain.Iva;
 using PrimaNota.Domain.PianoConti;
+using PrimaNota.Domain.PrimaNota;
 using PrimaNota.Infrastructure.Identity;
 
 namespace PrimaNota.Infrastructure.Persistence;
@@ -38,6 +39,9 @@ public sealed class AppDbContext
 
     /// <summary>Gets the <see cref="ContoFinanziario"/> set.</summary>
     public DbSet<ContoFinanziario> ContiFinanziari => Set<ContoFinanziario>();
+
+    /// <summary>Gets the <see cref="MovimentoPrimaNota"/> set.</summary>
+    public DbSet<MovimentoPrimaNota> Movimenti => Set<MovimentoPrimaNota>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)
