@@ -6,6 +6,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="AspNetCore.HealthChecks.SqlServer" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Settings.Configuration" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="Serilog.Enrichers.Environment" />
+    <PackageReference Include="Serilog.Enrichers.Thread" />
+    <PackageReference Include="Serilog.Exceptions" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\PrimaNota.Application\PrimaNota.Application.csproj" />
     <ProjectReference Include="..\PrimaNota.Infrastructure\PrimaNota.Infrastructure.csproj" />
     <ProjectReference Include="..\PrimaNota.Shared\PrimaNota.Shared.csproj" />

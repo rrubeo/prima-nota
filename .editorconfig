@@ -55,6 +55,17 @@ dotnet_diagnostic.SA1413.severity = none
 dotnet_diagnostic.SA1633.severity = none
 dotnet_diagnostic.SA1516.severity = none
 
+# CA1716: namespace conflicts with VB.NET keywords — we do not target VB
+dotnet_diagnostic.CA1716.severity = none
+
 [**/Migrations/*.cs]
 generated_code = true
 dotnet_analyzer_diagnostic.severity = none
+
+[tests/**/*.cs]
+# Allow Test_Method_Naming_With_Underscores (xUnit convention)
+dotnet_diagnostic.CA1707.severity = none
+# Tests can touch many things
+dotnet_diagnostic.CA1515.severity = none
+# xUnit uses [CollectionDefinition] classes named *Collection
+dotnet_diagnostic.CA1711.severity = none
