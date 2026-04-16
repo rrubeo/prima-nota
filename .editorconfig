@@ -68,6 +68,11 @@ dotnet_diagnostic.CA1873.severity = none
 # with logical reading order of helper methods placed near their callers.
 dotnet_diagnostic.SA1204.severity = none
 
+# S1135 ("Complete TODO"): we use TODO comments as intentional forward-references to
+# upcoming modules (e.g. "arrives with module 07"). Linked work is tracked in the
+# implementation-plan document, not as analyzer noise.
+dotnet_diagnostic.S1135.severity = none
+
 [**/Migrations/*.cs]
 generated_code = true
 dotnet_analyzer_diagnostic.severity = none

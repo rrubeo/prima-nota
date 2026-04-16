@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using PrimaNota.Domain.Anagrafiche;
+using PrimaNota.Domain.ContiFinanziari;
 using PrimaNota.Domain.Iva;
 using PrimaNota.Domain.PianoConti;
 
@@ -27,6 +28,9 @@ public interface IApplicationDbContext
 
     /// <summary>Gets the <see cref="AliquotaIva"/> set.</summary>
     DbSet<AliquotaIva> AliquoteIva { get; }
+
+    /// <summary>Gets the <see cref="ContoFinanziario"/> set.</summary>
+    DbSet<ContoFinanziario> ContiFinanziari { get; }
 
     /// <summary>Persists pending changes to the underlying store.</summary>
     /// <param name="cancellationToken">Token to cancel the operation.</param>

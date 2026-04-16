@@ -1,0 +1,143 @@
+@using MediatR
+@using PrimaNota.Application.ContiFinanziari
+@using PrimaNota.Domain.ContiFinanziari
+@inject IMediator Mediator
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" Model="model" Validation="Validator" ValidationDelay="0">
+            <MudGrid>
+                <MudItem xs="12" sm="4">
+                    <MudTextField @bind-Value="model.Codice" Label="Codice" Required="true" For="@(() => model.Codice)" />
+                </MudItem>
+                <MudItem xs="12" sm="8">
+                    <MudTextField @bind-Value="model.Nome" Label="Nome" Required="true" For="@(() => model.Nome)" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="TipoConto" @bind-Value="model.Tipo" Label="Tipo">
+                        @foreach (var v in Enum.GetValues<TipoConto>())
+                        {
+                            <MudSelectItem Value="v">@v</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="model.Istituto" Label="Istituto / Banca / Emittente" />
+                </MudItem>
+
+                @if (model.Tipo == TipoConto.Banca)
+                {
+                    <MudItem xs="12" sm="8">
+                        <MudTextField @bind-Value="model.Iban" Label="IBAN" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudTextField @bind-Value="model.Bic" Label="BIC / SWIFT" />
+                    </MudItem>
+                }
+                else if (model.Tipo is TipoConto.CartaDiCredito or TipoConto.CartaDebitoPrepagata)
+                {
+                    <MudItem xs="12" sm="8">
+                        <MudTextField @bind-Value="model.Intestatario" Label="Intestatario" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudTextField @bind-Value="model.Ultime4Cifre" Label="Ultime 4 cifre" MaxLength="4" />
+                    </MudItem>
+                }
+
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="decimal" @bind-Value="model.SaldoIniziale" Label="Saldo iniziale (€)" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker Label="Data saldo iniziale"
+                                   Date="@DateOnlyToDate(model.DataSaldoIniziale)"
+                                   DateChanged="@(d => model.DataSaldoIniziale = DateToDateOnly(d) ?? model.DataSaldoIniziale)" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="model.Note" Label="Note" Lines="2" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="saving">Salva</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public ContoFinanziarioDto? Existing { get; set; }
+
+    private ContoFinanziarioInput model = new();
+    private MudForm? form;
+    private bool saving;
+    private readonly ContoFinanziarioInputValidator validator = new();
+
+    private Func<object, string, Task<IEnumerable<string>>> Validator => async (_, prop) =>
+    {
+        var r = await validator.ValidateAsync(model);
+        return r.Errors.Where(e => e.PropertyName == prop).Select(e => e.ErrorMessage);
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (Existing is not null)
+        {
+            model = new ContoFinanziarioInput
+            {
+                Codice = Existing.Codice,
+                Nome = Existing.Nome,
+                Tipo = Existing.Tipo,
+                Istituto = Existing.Istituto,
+                Iban = Existing.Iban,
+                Bic = Existing.Bic,
+                Intestatario = Existing.Intestatario,
+                Ultime4Cifre = Existing.Ultime4Cifre,
+                SaldoIniziale = Existing.SaldoIniziale,
+                DataSaldoIniziale = Existing.DataSaldoIniziale,
+                Note = Existing.Note,
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        if (form is null) return;
+        await form.Validate();
+        if (!form.IsValid)
+        {
+            Snackbar.Add("Correggi gli errori.", Severity.Warning);
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            if (Existing is null)
+            {
+                await Mediator.Send(new CreateContoFinanziario(model));
+            }
+            else
+            {
+                await Mediator.Send(new UpdateContoFinanziario(Existing.Id, model));
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private static DateTime? DateOnlyToDate(DateOnly d) => d.ToDateTime(TimeOnly.MinValue);
+    private static DateOnly? DateToDateOnly(DateTime? d) => d.HasValue ? DateOnly.FromDateTime(d.Value) : null;
+}

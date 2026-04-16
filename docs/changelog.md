@@ -42,3 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deploy pipeline skeleton for IIS staging: `deploy-staging.yml` (publish → migrations via `sqlcmd` → `msdeploy` → smoke test), `deploy/iis/web.config` with security headers and WebSocket support, `deploy/iis/app-pool-setup.ps1` idempotent provisioning
 - `appsettings.Staging.json` and `appsettings.Production.json`
 - `docs/deployment.md` covering prerequisites, IIS setup, DB provisioning, secrets, workflow usage, rollback and local dev
+
+### Phase 2 — Domain base
+
+- Application layer bootstrap: MediatR 12.4.1 + FluentValidation 11.11.0 + Mapster 7.4.0 via `AddApplication()` assembly-scan registration
+- **Module 04 — Anagrafiche**: unified `Anagrafica` aggregate with Cliente / Fornitore / Dipendente role flags (non-exclusive), `Contatti` and `Indirizzo` owned value objects, CQRS (Create/Update/ToggleActivation/Get/List with role filter + search), `/anagrafiche`, `/anagrafiche/{clienti|fornitori|dipendenti}`, `/anagrafiche/{id}` Blazor pages with MudForm + FluentValidation
+- **Module 05 — Piano conti & Causali & Aliquote IVA**: `Categoria` (flat, Entrata/Uscita), `Causale` (TipoMovimento enum: Incasso/Pagamento/GirocontoInterno/StipendioNetto/F24/RimborsoNotaSpese, optional default Categoria), `AliquotaIva` (TipoIva: Ordinaria/Esente/NonImponibile/FuoriCampo/ReverseCharge with "natura" code N1..N7)
+- `MasterDataSeeder` provisioning 14 Italian categories, 10 Italian VAT rates (22/10/5/4/0/Esente art.10/Non imponibile art.8/9/Fuori campo/Reverse charge), 11 common causali — idempotent at startup
+- `/piano-conti`, `/causali`, `/aliquote-iva` pages with MudTable + MudDialog for inline create/edit
+- **Module 06 — Conti finanziari**: `ContoFinanziario` aggregate with `TipoConto` (Cassa/Banca/CartaDiCredito/CartaDebitoPrepagata), bank fields (Istituto/IBAN/BIC), card fields (Intestatario/Ultime4Cifre), `SaldoIniziale` + `DataSaldoIniziale` as anchor for future balance computation
+- `/conti-finanziari` page with MudTable, conditional fields per `TipoConto`, per-type balance aggregation cards (Cassa, Banche, Carte)
+- Migrations `AddAnagrafiche`, `AddPianoContiCausaliIva`, `AddContiFinanziari` with idempotent SQL scripts (005, 006, 007)
+- `IApplicationDbContext` exposes `DbSet` for Anagrafiche, Categorie, Causali, AliquoteIva, ContiFinanziari
+- `.editorconfig` adjustments: SA1402/SA1649 disabled in Application (MediatR convention), SA1204 and S1135 disabled globally (opinionated ordering / forward-reference TODOs)

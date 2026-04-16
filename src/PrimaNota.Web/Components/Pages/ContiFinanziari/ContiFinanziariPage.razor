@@ -1,0 +1,177 @@
+@page "/conti-finanziari"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.ContiFinanziari
+@using PrimaNota.Domain.ContiFinanziari
+@inject IMediator Mediator
+@inject IDialogService Dialog
+@inject ISnackbar Snackbar
+
+<PageTitle>Conti finanziari · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Conti finanziari</MudText>
+
+<MudStack Row="true" Class="mb-4">
+    <MudCheckBox T="bool" @bind-Value="includiNonAttivi" @bind-Value:after="ReloadAsync" Label="Includi non attivi" />
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
+        Nuovo conto
+    </MudButton>
+</MudStack>
+
+<MudGrid Spacing="3" Class="mb-4">
+    @foreach (var group in GroupedSaldi())
+    {
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.overline">@group.Label</MudText>
+                    <MudText Typo="Typo.h5">@FormatCurrency(group.Saldo)</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@group.Count conti</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    }
+</MudGrid>
+
+<MudTable Items="items" Hover="true" Dense="true" Loading="loading" Striped="true">
+    <HeaderContent>
+        <MudTh>Codice</MudTh>
+        <MudTh>Nome</MudTh>
+        <MudTh>Tipo</MudTh>
+        <MudTh>Dettagli</MudTh>
+        <MudTh Style="text-align: right">Saldo</MudTh>
+        <MudTh>Stato</MudTh>
+        <MudTh Style="width: 150px;">Azioni</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd><strong>@context.Codice</strong></MudTd>
+        <MudTd>@context.Nome</MudTd>
+        <MudTd><MudChip T="string" Size="Size.Small" Color="@ChipColor(context.Tipo)">@context.Tipo</MudChip></MudTd>
+        <MudTd>
+            @if (!string.IsNullOrWhiteSpace(context.Istituto))
+            {
+                <MudText Typo="Typo.caption">@context.Istituto</MudText><br />
+            }
+            @if (!string.IsNullOrWhiteSpace(context.Iban))
+            {
+                <MudText Typo="Typo.caption" Style="font-family: monospace;">@context.Iban</MudText>
+            }
+            else if (!string.IsNullOrWhiteSpace(context.Ultime4Cifre))
+            {
+                <MudText Typo="Typo.caption">•••• @context.Ultime4Cifre</MudText>
+            }
+        </MudTd>
+        <MudTd Style="text-align: right; font-family: monospace; font-weight: 600;">
+            @FormatCurrency(context.SaldoCorrente)
+        </MudTd>
+        <MudTd>
+            @if (context.Attivo)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">Attivo</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Non attivo</MudChip>
+            }
+        </MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditAsync(context))" />
+            <MudIconButton Icon="@(context.Attivo ? Icons.Material.Filled.Block : Icons.Material.Filled.CheckCircle)"
+                           Size="Size.Small"
+                           Color="@(context.Attivo ? Color.Warning : Color.Success)"
+                           OnClick="@(() => ToggleAsync(context))" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent><MudText>Nessun conto finanziario configurato.</MudText></NoRecordsContent>
+</MudTable>
+
+@code {
+    private bool includiNonAttivi;
+    private bool loading;
+    private IReadOnlyList<ContoFinanziarioListItemDto> items = Array.Empty<ContoFinanziarioListItemDto>();
+    private static readonly CultureInfo ItCulture = new("it-IT");
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        loading = true;
+        try
+        {
+            items = await Mediator.Send(new ListContiFinanziari(includiNonAttivi));
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task NewAsync()
+    {
+        var result = await Dialog.ShowAsync<ContoFinanziarioDialog>("Nuovo conto finanziario", new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var outcome = await result.Result;
+        if (outcome is { Canceled: false })
+        {
+            Snackbar.Add("Conto creato.", Severity.Success);
+            await ReloadAsync();
+        }
+    }
+
+    private async Task EditAsync(ContoFinanziarioListItemDto dto)
+    {
+        var full = await Mediator.Send(new GetContoFinanziario(dto.Id));
+        if (full is null)
+        {
+            Snackbar.Add("Conto non trovato.", Severity.Error);
+            return;
+        }
+
+        var p = new DialogParameters { ["Existing"] = full };
+        var result = await Dialog.ShowAsync<ContoFinanziarioDialog>("Modifica conto finanziario", p, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var outcome = await result.Result;
+        if (outcome is { Canceled: false })
+        {
+            Snackbar.Add("Conto aggiornato.", Severity.Success);
+            await ReloadAsync();
+        }
+    }
+
+    private async Task ToggleAsync(ContoFinanziarioListItemDto dto)
+    {
+        await Mediator.Send(new ToggleContoFinanziarioActivation(dto.Id, !dto.Attivo));
+        Snackbar.Add(dto.Attivo ? "Conto disattivato." : "Conto riattivato.", Severity.Info);
+        await ReloadAsync();
+    }
+
+    private IEnumerable<(string Label, decimal Saldo, int Count)> GroupedSaldi()
+    {
+        yield return ("Totale", items.Sum(i => i.SaldoCorrente), items.Count);
+        foreach (var g in items.GroupBy(i => i.Tipo))
+        {
+            yield return (TipoLabel(g.Key), g.Sum(i => i.SaldoCorrente), g.Count());
+        }
+    }
+
+    private static string TipoLabel(TipoConto t) => t switch
+    {
+        TipoConto.Cassa => "Cassa",
+        TipoConto.Banca => "Banche",
+        TipoConto.CartaDiCredito => "Carte di credito",
+        TipoConto.CartaDebitoPrepagata => "Carte debito/prepagate",
+        _ => t.ToString()
+    };
+
+    private static Color ChipColor(TipoConto t) => t switch
+    {
+        TipoConto.Cassa => Color.Success,
+        TipoConto.Banca => Color.Info,
+        TipoConto.CartaDiCredito => Color.Warning,
+        TipoConto.CartaDebitoPrepagata => Color.Primary,
+        _ => Color.Default
+    };
+
+    private static string FormatCurrency(decimal value) =>
+        value.ToString("N2", ItCulture) + " €";
+}
