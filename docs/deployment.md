@@ -2,6 +2,28 @@
 
 > Target: **IIS 10+** su **Windows Server 2022+**, con **SQL Server 2022** raggiungibile dalla app.
 
+## Ambienti
+
+Il progetto prevede tre ambienti **completamente isolati**: database, login, server,
+configurazione — niente viene condiviso tra ambienti.
+
+| Aspetto | Development | Staging | Production |
+|---------|-------------|---------|------------|
+| **Scopo** | sviluppo locale, unit/integration test | validazione pre-rilascio, UAT, smoke test di deploy | dati reali aziendali |
+| **Nome DB** | `PrimaNota_Dev` | `PrimaNota_Staging` | `PrimaNota_Production` |
+| **Server DB** | LocalDB oppure SQL Server in Docker sulla workstation | `sql-staging.azienda.local` | `sql.azienda.local` |
+| **Login SQL** | SA LocalDB (Windows auth) oppure `sa` del container | `primanota_app_staging` (db_owner) | `primanota_app_prod` (db_owner) |
+| **Host app** | `https://localhost:7070` (`dotnet run`) | IIS su `iis-staging.azienda.local` | IIS su `iis.azienda.local` |
+| **Hostname** | `localhost` | `primanota-staging.azienda.local` | `primanota.azienda.local` |
+| **Dove vive la connection string** | `dotnet user-secrets` del progetto Web | env variable `Database__ConnectionString` sull'App Pool IIS | idem |
+| **Chi applica le migration** | dev (`dotnet ef database update` o startup auto) | GitHub Actions → `sqlcmd` (workflow `deploy-staging.yml`) | GitHub Actions → `sqlcmd` (workflow `deploy-production.yml`) |
+| **Trigger deploy** | — | push su `develop` | push su `main` + approvazione manuale |
+| **Dati** | finti, generati con Bogus | dataset realistico ma anonimizzato | dati reali (GDPR: accesso ristretto, backup cifrati) |
+| **ASPNETCORE_ENVIRONMENT** | `Development` | `Staging` | `Production` |
+
+Ogni ambiente ha una propria entry `Environment` su GitHub (`staging`, `production`)
+con i suoi secrets e variables — vedi [sezione 5](#5-deploy-via-github-actions).
+
 ## Contenuti
 
 - [1. Prerequisiti server](#1-prerequisiti-server)
@@ -65,34 +87,85 @@ Copiare `deploy/iis/web.config` nella physical path iniziale (il workflow lo inc
 
 ## 3. Database — primo setup
 
-Creare il database vuoto:
+Lo script seguente crea **un ambiente DB completo** (database + login + user db_owner).
+È lo **stesso script** che si usa per Dev (se su SQL Server reale), Staging e Production,
+variando i parametri `$DbName` e `$LoginName`.
+
+Eseguirlo con un account con privilegi `sysadmin` sul server SQL Server:
 
 ```sql
-CREATE DATABASE PrimaNota COLLATE Latin1_General_CI_AS;
+-- ===========================================================================
+-- Prima Nota — DB + Login provisioning (riusabile per Dev / Staging / Prod)
+-- Parametri da sostituire:
+--   :setvar DbName        PrimaNota_Staging        -- nome database
+--   :setvar LoginName     primanota_app_staging    -- nome login SQL
+--   :setvar LoginPassword Strong_Password_Here!    -- password login SQL
+-- ===========================================================================
+
+-- 1. Login a livello istanza
+IF SUSER_ID('$(LoginName)') IS NULL
+BEGIN
+    CREATE LOGIN [$(LoginName)]
+        WITH PASSWORD = N'$(LoginPassword)',
+             CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
+END
 GO
 
--- Abilita TDE (richiede DEK + certificato nel master). Vedi docs SQL Server.
-
-USE PrimaNota;
+-- 2. Database
+IF DB_ID('$(DbName)') IS NULL
+BEGIN
+    CREATE DATABASE [$(DbName)] COLLATE Latin1_General_CI_AS;
+END
 GO
 
-CREATE USER primanota_app FOR LOGIN primanota_app;
-EXEC sp_addrolemember 'db_datareader', 'primanota_app';
-EXEC sp_addrolemember 'db_datawriter', 'primanota_app';
-EXEC sp_addrolemember 'db_ddladmin',   'primanota_app';   -- Hangfire creates its schema
+USE [$(DbName)];
+GO
+
+-- 3. User mappato al login + db_owner (unico ruolo, come da scelta d'ambiente)
+IF USER_ID('$(LoginName)') IS NULL
+BEGIN
+    CREATE USER [$(LoginName)] FOR LOGIN [$(LoginName)];
+END
+GO
+
+ALTER ROLE db_owner ADD MEMBER [$(LoginName)];
+GO
+
+-- 4. (Production e staging) Abilita TDE.
+--    Per dettagli completi e rotazione chiavi, vedi MS docs "Transparent Data Encryption".
+--    Lo skip automatico: TDE non è necessario in Development.
 ```
 
-Applicare in ordine gli script in `deploy/sql/migrations/`:
+Eseguire lo script con `sqlcmd` passando i parametri:
+
+```powershell
+sqlcmd -S sql-staging.azienda.local -E `
+  -v DbName="PrimaNota_Staging" `
+      LoginName="primanota_app_staging" `
+      LoginPassword="REDACTED_STRONG_PWD" `
+  -i deploy/sql/provision-environment.sql
+```
+
+> Lo script è reso idempotente dai check `IF SUSER_ID / DB_ID / USER_ID IS NULL`,
+> quindi puoi lanciarlo più volte senza effetti collaterali.
+
+### Migrations
+
+Le migration vivono in `deploy/sql/migrations/` come script SQL numerati:
 
 ```
 001_Initial.sql
 002_AddIdentity.sql
 003_AddEsercizi.sql
 004_AddAuditLog.sql
-... (gli script sono idempotenti, possono essere ri-applicati senza effetti collaterali)
 ```
 
-Sul workflow di deploy, `migrations.sql` è una singola concatenazione idempotente generata con `dotnet ef migrations script --idempotent`: può essere applicata a un DB vuoto o già popolato indifferentemente.
+Sono generati con `dotnet ef migrations script --idempotent`, quindi possono essere
+ri-applicati su DB già aggiornato senza effetti collaterali.
+
+Il workflow di deploy GitHub Actions applica automaticamente `migrations.sql`
+(concatenazione di tutte le migration, idempotente) via `sqlcmd` con le credenziali
+del login dell'ambiente target.
 
 ---
 
@@ -246,9 +319,11 @@ Verificare nel visualizzatore eventi Windows (o nei log Serilog in `D:\Apps\Prim
 - Docker Desktop (per Testcontainers e opzionalmente SQL Server container)
 - Git
 
-### Database locale
+### Database locale (Development)
 
-**Opzione A — SQL Server in Docker:**
+Il DB di sviluppo si chiama **`PrimaNota_Dev`** ed è completamente separato da Staging/Production.
+
+**Opzione A — SQL Server in Docker (consigliata, cross-platform):**
 
 ```bash
 docker run --name mssql-primanota -d \
@@ -258,18 +333,35 @@ docker run --name mssql-primanota -d \
   mcr.microsoft.com/mssql/server:2022-latest
 ```
 
-Connection string da usare in `dotnet user-secrets`:
+Il database `PrimaNota_Dev` viene creato automaticamente dalla app al primo avvio
+(via `DbContext.Database.MigrateAsync()`), oppure puoi provisioningarlo manualmente
+con lo script `deploy/sql/provision-environment.sql` (vedi sezione 3).
+
+**Opzione B — SQL Server LocalDB (solo Windows):** la connection string di default
+in `appsettings.json` punta già a `(localdb)\\mssqllocaldb;Database=PrimaNota_Dev`.
+
+### Secrets locali
 
 ```bash
 cd src/PrimaNota.Web
-dotnet user-secrets init
-dotnet user-secrets set "Database:ConnectionString" "Server=localhost,1433;Database=PrimaNota_Dev;User Id=sa;Password=Strong_Password_123!;TrustServerCertificate=True;"
-dotnet user-secrets set "Identity:Bootstrap:Email" "admin@local"
+dotnet user-secrets init   # solo al primo setup
+
+# Se usi Docker (Opzione A), imposta la connection string:
+dotnet user-secrets set "Database:ConnectionString" \
+  "Server=localhost,1433;Database=PrimaNota_Dev;User Id=sa;Password=Strong_Password_123!;TrustServerCertificate=True;"
+
+# Bootstrap admin per il primo login (rimuovilo dopo il primo avvio):
+dotnet user-secrets set "Identity:Bootstrap:Email"    "admin@local"
 dotnet user-secrets set "Identity:Bootstrap:Password" "Admin_Password_123!"
 dotnet user-secrets set "Identity:Bootstrap:FullName" "Administrator"
+
+# (Opzionale) Credenziali Google OAuth per testare il flusso esterno:
+dotnet user-secrets set "Authentication:Google:ClientId"     "xxxx.apps.googleusercontent.com"
+dotnet user-secrets set "Authentication:Google:ClientSecret" "GOCSPX-xxxx"
 ```
 
-**Opzione B — SQL Server LocalDB** (Windows): la connection string di default in `appsettings.json` punta già a `(localdb)\\mssqllocaldb`.
+I secrets di development vivono in `~/.microsoft/usersecrets/prima-nota-web/` (Linux/macOS)
+o `%APPDATA%\Microsoft\UserSecrets\prima-nota-web\` (Windows) — **mai nel repo**.
 
 ### Avvio
 
