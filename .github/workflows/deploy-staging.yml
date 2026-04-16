@@ -81,13 +81,26 @@ jobs:
       - name: Apply DB migrations (idempotent script via sqlcmd)
         shell: pwsh
         env:
-          PRIMANOTA_DB_CONN: ${{ secrets.STAGING_DB_ADMIN_CONN }}
+          DB_SERVER:   ${{ vars.STAGING_DB_SERVER }}
+          DB_NAME:     ${{ vars.STAGING_DB_NAME }}
+          DB_USER:     ${{ secrets.STAGING_DB_USER }}
+          DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:PRIMANOTA_DB_CONN)) {
-            Write-Error "STAGING_DB_ADMIN_CONN secret is not configured."
-            exit 1
+          foreach ($pair in @(
+              @{ Name = 'STAGING_DB_SERVER (variable)';  Value = $env:DB_SERVER   },
+              @{ Name = 'STAGING_DB_NAME (variable)';    Value = $env:DB_NAME     },
+              @{ Name = 'STAGING_DB_USER (secret)';      Value = $env:DB_USER     },
+              @{ Name = 'STAGING_DB_PASSWORD (secret)';  Value = $env:DB_PASSWORD }
+          )) {
+              if ([string]::IsNullOrWhiteSpace($pair.Value)) {
+                  Write-Error "$($pair.Name) is not configured on the staging environment."
+                  exit 1
+              }
           }
-          sqlcmd -S "$env:PRIMANOTA_DB_CONN" -i publish/migrations.sql -b
+          sqlcmd -S "$env:DB_SERVER" -d "$env:DB_NAME" `
+                 -U "$env:DB_USER" -P "$env:DB_PASSWORD" `
+                 -N -C `
+                 -b -i publish/migrations.sql
 
       - name: WebDeploy to IIS
         shell: pwsh

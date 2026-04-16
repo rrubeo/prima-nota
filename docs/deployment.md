@@ -111,18 +111,49 @@ I segreti **non** vivono in `appsettings.*.json`: sono environment variables let
 | `Identity__Bootstrap__FullName` | Solo al primo avvio | Nome admin iniziale |
 | `DOTNET_ENVIRONMENT` | No | Ignorato da ASP.NET Core, ma utile per tool EF |
 
-### Configurazione via appcmd
+### Configurazione via appcmd (esempio completo per staging)
+
+Eseguire come Administrator sul server IIS, una sola volta per ciascun ambiente:
 
 ```powershell
-$Env = 'Staging'
-$Pool = "PrimaNota.$Env"
+$Pool = 'PrimaNota.Staging'
+$Conn = 'Server=sql-staging.azienda.local,1433;Database=PrimaNota_Staging;User Id=primanota_app;Password=REDACTED;Encrypt=True;TrustServerCertificate=False;'
+$appcmd = 'C:\Windows\System32\inetsrv\appcmd.exe'
 
-C:\Windows\System32\inetsrv\appcmd.exe set config -section:system.applicationHost/applicationPools `
-  /[name='$Pool'].environmentVariables.[name='ASPNETCORE_ENVIRONMENT',value='Staging'] /commit:apphost
+# Helper
+function Set-PoolEnv([string]$Name, [string]$Value) {
+    & $appcmd set config -section:system.applicationHost/applicationPools `
+        "/+[name='$Pool'].environmentVariables.[name='$Name',value='$Value']" /commit:apphost
+}
 
-C:\Windows\System32\inetsrv\appcmd.exe set config -section:system.applicationHost/applicationPools `
-  /[name='$Pool'].environmentVariables.[name='Database__ConnectionString',value='Server=...;Database=PrimaNota;User Id=primanota_app;Password=...;Encrypt=True;'] /commit:apphost
+Set-PoolEnv 'ASPNETCORE_ENVIRONMENT'                  'Staging'
+Set-PoolEnv 'Database__ConnectionString'              $Conn
+Set-PoolEnv 'Authentication__Google__ClientId'        'xxxxxxxx.apps.googleusercontent.com'
+Set-PoolEnv 'Authentication__Google__ClientSecret'    'GOCSPX-xxxxxxxx'
+
+# Solo al primissimo avvio: crea l'admin iniziale e poi rimuovi queste 3 righe.
+Set-PoolEnv 'Identity__Bootstrap__Email'              'admin@azienda.it'
+Set-PoolEnv 'Identity__Bootstrap__Password'           'ChangeMeStrongPwd2026!'
+Set-PoolEnv 'Identity__Bootstrap__FullName'           'Amministratore'
+
+Restart-WebAppPool -Name $Pool
 ```
+
+Dopo il primo login del bootstrap admin, rimuovi le tre `Identity__Bootstrap__*` con:
+
+```powershell
+& $appcmd set config -section:system.applicationHost/applicationPools `
+    "/-[name='$Pool'].environmentVariables.[name='Identity__Bootstrap__Email']" /commit:apphost
+& $appcmd set config -section:system.applicationHost/applicationPools `
+    "/-[name='$Pool'].environmentVariables.[name='Identity__Bootstrap__Password']" /commit:apphost
+& $appcmd set config -section:system.applicationHost/applicationPools `
+    "/-[name='$Pool'].environmentVariables.[name='Identity__Bootstrap__FullName']" /commit:apphost
+Restart-WebAppPool -Name $Pool
+```
+
+> ⚠️ `Database__ConnectionString` resta sul server in chiaro (come ogni env var di app pool).
+> Le ACL su `applicationHost.config` devono permetterne la lettura solo ad Administrator
+> e al service account del pool. Le variabili non vengono MAI versionate nel repository.
 
 Dopo aver popolato l'admin iniziale con successo, **rimuovere le variabili `Identity__Bootstrap__*`** e riavviare l'app pool.
 
@@ -132,17 +163,31 @@ Dopo aver popolato l'admin iniziale con successo, **rimuovere le variabili `Iden
 
 ### Segreti e variabili da configurare (una tantum)
 
-Su GitHub → Settings → Environments → `staging` (anche `production`):
+Su GitHub → Settings → Environments → `staging` (poi duplicare per `production`):
 
-**Secrets:**
-- `STAGING_DB_ADMIN_CONN` — connection string con login `primanota_migrator` (solo per applicare migration).
-- `STAGING_IIS_USER` — utente abilitato a WebDeploy.
-- `STAGING_IIS_PASS` — password.
+**Secrets (valori sensibili, mai visualizzati):**
 
-**Variables:**
-- `STAGING_IIS_HOST` — es. `iis-staging.azienda.local`.
-- `STAGING_IIS_SITE` — es. `PrimaNota.Staging`.
-- `STAGING_HOSTNAME` — es. `primanota-staging.azienda.local`.
+| Nome | Esempio | Scopo |
+|------|---------|-------|
+| `STAGING_DB_USER` | `primanota_app` | Login SQL Server (db_owner sul DB) |
+| `STAGING_DB_PASSWORD` | `••••••••••` | Password del login |
+| `STAGING_IIS_USER` | `DOMAIN\\deploy-svc` o `deploy@azienda` | Utente abilitato a WebDeploy (IIS Management Service) |
+| `STAGING_IIS_PASS` | `••••••••••` | Password dell'utente WebDeploy |
+
+**Variables (valori non sensibili, visibili nei log):**
+
+| Nome | Esempio | Scopo |
+|------|---------|-------|
+| `STAGING_DB_SERVER` | `sql-staging.azienda.local` o `sql-staging.azienda.local,1433` | Nome/istanza SQL Server + porta |
+| `STAGING_DB_NAME` | `PrimaNota_Staging` | Nome del database |
+| `STAGING_IIS_HOST` | `iis-staging.azienda.local` | Host IIS (porta 8172 per Management Service) |
+| `STAGING_IIS_SITE` | `PrimaNota.Staging` | Nome del sito IIS creato da `app-pool-setup.ps1` |
+| `STAGING_HOSTNAME` | `primanota-staging.azienda.local` | Hostname HTTPS per lo smoke test |
+
+> Il workflow usa lo **stesso** utente di database (db_owner) sia per applicare le migration
+> sia come runtime dell'app. Questa è la configurazione che hai scelto: un singolo login SQL.
+> Se in futuro vuoi separare i privilegi (un migrator con db_owner e un runtime con
+> datareader+datawriter+ddladmin), basta aggiungere due coppie user/password distinte.
 
 Se `STAGING_IIS_HOST` non è impostato, il job `deploy` viene saltato (il workflow produce comunque l'artefatto).
 
