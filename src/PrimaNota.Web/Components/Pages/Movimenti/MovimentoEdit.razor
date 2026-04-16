@@ -480,21 +480,11 @@ else
 
         try
         {
-            using var content = new MultipartFormDataContent();
-            await using var fs = file.OpenReadStream(20L * 1024 * 1024);
-            using var sc = new StreamContent(fs);
-            sc.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
-            content.Add(sc, "file", file.Name);
-
-            using var http = HttpFactory.CreateClient();
-            http.BaseAddress = new Uri(Navigation.BaseUri);
-            var resp = await http.PostAsync(new Uri($"/allegati/{Id.Value}/upload", UriKind.Relative), content);
-            if (!resp.IsSuccessStatusCode)
-            {
-                var msg = await resp.Content.ReadAsStringAsync();
-                Snackbar.Add($"Upload fallito: {msg}", Severity.Error);
-                return;
-            }
+            // Blazor Server has direct access to the file stream, so we call the
+            // MediatR handler in-process instead of round-tripping through HTTPS
+            // (avoids dev-cert trust issues and is faster).
+            await using var stream = file.OpenReadStream(20L * 1024 * 1024);
+            await Mediator.Send(new UploadAllegato(Id.Value, file.Name, file.ContentType, stream));
 
             Snackbar.Add("Allegato caricato.", Severity.Success);
             await ReloadAsync();
