@@ -46,17 +46,17 @@ public sealed class MasterDataSeeder
 
     private static readonly IReadOnlyList<CausaleSeed> DefaultCausali = new[]
     {
-        new CausaleSeed("INC-FATT", "Incasso fattura cliente", TipoMovimento.Incasso, "VEN"),
-        new CausaleSeed("INC-CASH", "Incasso corrispettivo", TipoMovimento.Incasso, "VEN"),
-        new CausaleSeed("PAG-FATT", "Pagamento fattura fornitore", TipoMovimento.Pagamento, "ACQ-SERV"),
-        new CausaleSeed("PAG-BENI", "Pagamento acquisto beni", TipoMovimento.Pagamento, "ACQ-BENI"),
-        new CausaleSeed("PAG-UTE", "Pagamento utenze", TipoMovimento.Pagamento, "UTEN"),
-        new CausaleSeed("PAG-AFF", "Pagamento affitto", TipoMovimento.Pagamento, "AFF"),
-        new CausaleSeed("STIP", "Stipendio netto", TipoMovimento.StipendioNetto, "STIP"),
-        new CausaleSeed("F24", "Pagamento F24", TipoMovimento.F24, "TAXES"),
-        new CausaleSeed("GC", "Giroconto interno", TipoMovimento.GirocontoInterno, null),
-        new CausaleSeed("RIMB-SPS", "Rimborso nota spese dipendente", TipoMovimento.RimborsoNotaSpese, "RIMB"),
-        new CausaleSeed("INT-BC", "Commissioni e interessi bancari", TipoMovimento.Pagamento, "INT-PAS"),
+        new CausaleSeed("INC-FATT", "Incasso fattura cliente", TipoMovimento.Incasso, FonteCausale.Fattura, "VEN"),
+        new CausaleSeed("INC-CASH", "Incasso corrispettivo", TipoMovimento.Incasso, FonteCausale.Corrispettivo, "VEN"),
+        new CausaleSeed("PAG-FATT", "Pagamento fattura fornitore", TipoMovimento.Pagamento, null, "ACQ-SERV"),
+        new CausaleSeed("PAG-BENI", "Pagamento acquisto beni", TipoMovimento.Pagamento, null, "ACQ-BENI"),
+        new CausaleSeed("PAG-UTE", "Pagamento utenze", TipoMovimento.Pagamento, null, "UTEN"),
+        new CausaleSeed("PAG-AFF", "Pagamento affitto", TipoMovimento.Pagamento, null, "AFF"),
+        new CausaleSeed("STIP", "Stipendio netto", TipoMovimento.StipendioNetto, null, "STIP"),
+        new CausaleSeed("F24", "Pagamento F24", TipoMovimento.F24, null, "TAXES"),
+        new CausaleSeed("GC", "Giroconto interno", TipoMovimento.GirocontoInterno, null, null),
+        new CausaleSeed("RIMB-SPS", "Rimborso nota spese dipendente", TipoMovimento.RimborsoNotaSpese, null, "RIMB"),
+        new CausaleSeed("INT-BC", "Commissioni e interessi bancari", TipoMovimento.Pagamento, null, "INT-PAS"),
     };
 
     private readonly AppDbContext db;
@@ -79,6 +79,20 @@ public sealed class MasterDataSeeder
         await SeedCategorieAsync(cancellationToken);
         await SeedAliquoteIvaAsync(cancellationToken);
         await SeedCausaliAsync(cancellationToken);
+        await SeedConfigurazioneAziendaAsync(cancellationToken);
+    }
+
+    private async Task SeedConfigurazioneAziendaAsync(CancellationToken cancellationToken)
+    {
+        var exists = await db.ConfigurazioneAzienda.AnyAsync(cancellationToken);
+        if (exists)
+        {
+            return;
+        }
+
+        db.ConfigurazioneAzienda.Add(new Domain.Azienda.ConfigurazioneAzienda());
+        await db.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Seeded default ConfigurazioneAzienda (Denominazione, esigibilita IVA immediata).");
     }
 
     private async Task SeedCategorieAsync(CancellationToken cancellationToken)
@@ -161,11 +175,8 @@ public sealed class MasterDataSeeder
     private static Causale MaterializeCausale(CausaleSeed c, Dictionary<string, Guid> categorieByCode)
     {
         var entity = new Causale(c.Codice, c.Nome, c.Tipo);
-        if (c.CategoriaCodice is not null && categorieByCode.TryGetValue(c.CategoriaCodice, out var catId))
-        {
-            entity.Update(c.Codice, c.Nome, c.Tipo, catId, null);
-        }
-
+        Guid? catId = c.CategoriaCodice is not null && categorieByCode.TryGetValue(c.CategoriaCodice, out var id) ? id : null;
+        entity.Update(c.Codice, c.Nome, c.Tipo, c.Fonte, catId, null);
         return entity;
     }
 
@@ -180,5 +191,6 @@ public sealed class MasterDataSeeder
         string Codice,
         string Nome,
         TipoMovimento Tipo,
+        FonteCausale? Fonte,
         string? CategoriaCodice);
 }

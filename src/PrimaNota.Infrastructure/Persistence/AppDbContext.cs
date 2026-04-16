@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using PrimaNota.Application.Abstractions;
 using PrimaNota.Domain.Anagrafiche;
+using PrimaNota.Domain.Azienda;
 using PrimaNota.Domain.ContiFinanziari;
 using PrimaNota.Domain.Esercizi;
 using PrimaNota.Domain.Iva;
@@ -46,6 +47,9 @@ public sealed class AppDbContext
 
     /// <summary>Gets the <see cref="EsercizioContabile"/> set.</summary>
     public DbSet<EsercizioContabile> Esercizi => Set<EsercizioContabile>();
+
+    /// <summary>Gets the <see cref="Domain.Azienda.ConfigurazioneAzienda"/> singleton set.</summary>
+    public DbSet<ConfigurazioneAzienda> ConfigurazioneAzienda => Set<ConfigurazioneAzienda>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)

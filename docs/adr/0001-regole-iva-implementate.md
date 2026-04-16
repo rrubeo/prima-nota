@@ -109,6 +109,86 @@ Saldo finale       = Saldo periodo − Credito riportato
   Il calcolo del reddito imponibile forfettario (ricavi × coefficiente −
   contributi) è rimandato a una fase successiva di reporting.
 
+### 6bis. Esigibilità IVA (Immediata / Cassa) e pagamenti parziali
+
+*Aggiunto in fase 4.1 dopo una review del commercialista: la v1 del modulo*
+*liquidava sempre in esigibilità immediata, ignorando il regime "IVA per*
+*cassa" e trattando il pagamento come un evento singolo. Errato per le*
+*fatture differite e, soprattutto, per i regimi opzionali per cassa.*
+
+- **`ConfigurazioneAzienda`** è un **singleton** (PK fisso = 1) che porta i
+  parametri aziendali che non appartengono al singolo esercizio: denominazione,
+  partita IVA, codice fiscale, indirizzo, contatti e **`EsigibilitaIvaPredefinita`**
+  (Immediata | Cassa). Il seeder garantisce la riga al primo avvio. Il regime
+  di esigibilità è aziendale perché l'opzione IVA per cassa è un'opzione
+  pluriennale a livello di partita IVA, non un attributo del singolo esercizio.
+
+- **`MovimentoPrimaNota.DataCompetenza`** è la data di **competenza IVA**
+  (di norma = data documento). Default `= Data` per movimenti digitati a mano;
+  impostata esplicitamente quando si importa una fattura XML dove la data
+  documento è antecedente alla data registrazione. I registri IVA filtrano
+  e ordinano per `DataCompetenza` (non più per `Data`).
+
+- **`MovimentoPrimaNota.Pagamenti[]`** è una collection figlia (tabella
+  `PagamentiMovimento`) che modella **pagamenti parziali, acconti e rate**.
+  Ogni `PagamentoMovimento` ha `Data`, `Importo` (sempre positivo), `ContoFinanziarioId`
+  e una nota libera. Derivati:
+
+  ```
+  TotalePagato = Σ Pagamenti.Importo
+  Residuo      = |Totale fattura| − TotalePagato
+  IsFullyPaid  = Residuo ≤ 0,01 €
+  DataPagamento = max(Pagamenti.Data)  se IsFullyPaid, altrimenti null
+  ```
+
+  Il vincolo `Importo ≤ Residuo + 0,01 €` impedisce sovra-pagamenti. I
+  pagamenti sono ammessi su Draft e Confirmed; su Reconciled la gestione
+  spetta al modulo 10 (riconciliazione bancaria).
+
+- **Registro IVA con esigibilità**: anche il registro IVA (`GetRegistroIva`)
+  segue l'esigibilità aziendale. Sotto **Immediata** il registro è filtrato
+  per `DataCompetenza` (data documento). Sotto **Cassa** il registro emette
+  una riga per ogni `(riga × pagamento-in-periodo)` con importi pro-quota,
+  `Data = pagamento.Data`. I movimenti senza `Pagamenti[]` esplicita
+  (vendite cash / corrispettivi registrati come singola transazione che
+  tocca direttamente Cassa/Banca) ricadono su `Data = m.Data` con importo
+  intero. In questo modo la vista del registro rispecchia esattamente quello
+  che concorre alla liquidazione del periodo.
+
+- **Liquidazione periodica con esigibilità**:
+
+  - **Immediata**: IVA esigibile **a prescindere dal pagamento**, sulla
+    data di competenza. Formula invariata (vedi §5), ma i registri ora
+    sono filtrati su `DataCompetenza in [dataInizio, dataFine]`.
+
+  - **Cassa**: IVA esigibile **solo al momento dell'incasso/pagamento**,
+    proporzionalmente all'importo incassato/pagato. Per ogni fattura con
+    almeno un `Pagamento` nel periodo:
+
+    ```
+    ratio = Σ Pagamenti_in_periodo.Importo / |Totale fattura|
+    IVA pro-quota riga = scorpora(|riga.Importo|, aliquota.%).imposta × ratio
+    ```
+
+    Le righe con natura `Entrata` contribuiscono al debito; quelle con
+    natura `Uscita` al credito (con la consueta detrazione per
+    `PercentualeIndetraibile`). Il `ratio` è capped a 1 per sicurezza
+    (acconti superiori al totale in presenza di note di credito non
+    ancora rappresentate).
+
+- **Limitazioni coscienti della v1 per cassa**:
+  - **Cap 12 mesi** (ex art. 32-bis DL 83/2012): dopo un anno
+    dall'emissione della fattura, l'IVA diventa comunque esigibile
+    anche se non incassata. Non implementato: richiede un secondo
+    criterio di inclusione (fatture con `DataCompetenza ≤ periodo − 12 mesi`
+    il cui Residuo è ancora > 0). Valutare in Fase 8 sul parere del
+    commercialista.
+  - Le **note di credito** oggi si registrano come movimento separato
+    con segno opposto: non esiste ancora un link esplicito "rettifica
+    di fattura X". Sotto cassa, la nota di credito su una fattura già
+    (parzialmente) incassata richiederà una gestione dedicata.
+  - Il **regime forfettario** ignora del tutto l'esigibilità (nessuna IVA).
+
 ### 6. Percentuale di indetraibilità per riga → regola dell'aliquota
 
 La percentuale di indetraibilità IVA non è impostata per riga, ma vive
@@ -135,3 +215,7 @@ sull'`AliquotaIva` stessa (`PercentualeIndetraibile`). Motivazione:
 - [ ] Valutare in Fase 8 il credito IVA di apertura e l'export per la dichiarazione annuale
 - [ ] Quando arriva la Fase 7 (note spese), confermare che i rimborsi nota spese con IVA confluiscono correttamente negli Acquisti
 - [ ] Modulo 10 (riconciliazione) non deve alterare gli importi delle righe, solo il link a estratto conto
+- [ ] CRUD UI per `ConfigurazioneAzienda` (`/admin/azienda`) e per i pagamenti parziali (pannello nel form movimento); scheda cliente/fornitore come report dedicato
+- [ ] Cap 12 mesi IVA per cassa (art. 32-bis DL 83/2012) dopo parere commercialista
+- [x] Ventilazione corrispettivi (art. 24 c. 3 DPR 633/72): **esclusa deliberatamente** — ogni riga movimento porta l'aliquota IVA esplicita, non servono corrispettivi a aliquota mista ripartiti in proporzione agli acquisti
+- [ ] Link esplicito nota-di-credito → fattura per corretta rettifica pro-quota sotto Cassa

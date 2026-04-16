@@ -17,6 +17,7 @@ internal sealed class CausaleConfiguration : IEntityTypeConfiguration<Causale>
         builder.Property(c => c.Codice).IsRequired().HasMaxLength(32);
         builder.Property(c => c.Nome).IsRequired().HasMaxLength(200);
         builder.Property(c => c.Tipo).HasConversion<string>().HasMaxLength(32).IsRequired();
+        builder.Property(c => c.Fonte).HasConversion<string>().HasMaxLength(16);
         builder.Property(c => c.CategoriaDefaultId);
         builder.Property(c => c.Attiva).IsRequired();
         builder.Property(c => c.Note).HasMaxLength(500);

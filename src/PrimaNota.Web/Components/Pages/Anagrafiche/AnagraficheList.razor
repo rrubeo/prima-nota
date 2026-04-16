@@ -103,6 +103,12 @@
             }
         </MudTd>
         <MudTd>
+            <MudTooltip Text="Scheda conto">
+                <MudIconButton Icon="@Icons.Material.Filled.Receipt"
+                               Color="Color.Secondary"
+                               Size="Size.Small"
+                               OnClick="@(() => Navigation.NavigateTo($"/anagrafiche/{context.Id}/scheda"))" />
+            </MudTooltip>
             <MudIconButton Icon="@Icons.Material.Filled.Edit"
                            Color="Color.Primary"
                            Size="Size.Small"

@@ -137,6 +137,7 @@ public sealed class ListMovimentiHandler : IRequestHandler<ListMovimenti, IReadO
                 NumeroRighe = m.Righe.Count,
                 m.Stato,
                 AllegatiCount = m.Allegati.Count,
+                TotalePagato = m.Pagamenti.Sum(p => p.Importo),
             })
             .Take(1000)
             .ToListAsync(cancellationToken);
@@ -153,18 +154,26 @@ public sealed class ListMovimentiHandler : IRequestHandler<ListMovimenti, IReadO
         }
 
         return filtered
-            .Select(p => new MovimentoListItemDto(
-                p.Id,
-                p.Data,
-                p.Descrizione,
-                p.Numero,
-                p.CausaleCodice,
-                p.CausaleNome,
-                p.AnagraficaRagioneSociale,
-                p.Totale,
-                p.NumeroRighe,
-                p.Stato,
-                p.AllegatiCount))
+            .Select(p =>
+            {
+                var totaleLordo = Math.Abs(p.Totale);
+                var residuo = decimal.Round(totaleLordo - p.TotalePagato, 2, MidpointRounding.ToEven);
+                var isFullyPaid = totaleLordo > 0m && residuo <= MovimentoPrimaNota.PagamentoTolerance;
+                return new MovimentoListItemDto(
+                    p.Id,
+                    p.Data,
+                    p.Descrizione,
+                    p.Numero,
+                    p.CausaleCodice,
+                    p.CausaleNome,
+                    p.AnagraficaRagioneSociale,
+                    p.Totale,
+                    p.NumeroRighe,
+                    p.Stato,
+                    p.AllegatiCount,
+                    residuo,
+                    isFullyPaid);
+            })
             .ToList();
     }
 }
@@ -186,6 +195,7 @@ public sealed class GetMovimentoHandler : IRequestHandler<GetMovimento, Moviment
             .AsNoTracking()
             .Include(m => m.Righe)
             .Include(m => m.Allegati)
+            .Include(m => m.Pagamenti)
             .FirstOrDefaultAsync(m => m.Id == request.Id, cancellationToken);
 
         if (entity is null)
@@ -193,9 +203,14 @@ public sealed class GetMovimentoHandler : IRequestHandler<GetMovimento, Moviment
             return null;
         }
 
+        var contiById = await db.ContiFinanziari.AsNoTracking()
+            .Where(c => entity.Pagamenti.Select(p => p.ContoFinanziarioId).Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.Nome, cancellationToken);
+
         return new MovimentoDto(
             entity.Id,
             entity.Data,
+            entity.DataCompetenza,
             entity.EsercizioAnno,
             entity.Descrizione,
             entity.Numero,
@@ -216,7 +231,22 @@ public sealed class GetMovimentoHandler : IRequestHandler<GetMovimento, Moviment
                 .ToList(),
             entity.Allegati
                 .Select(a => new AllegatoDto(a.Id, a.NomeFile, a.MimeType, a.Size, a.UploadedAt))
-                .ToList());
+                .ToList(),
+            entity.Pagamenti
+                .OrderBy(p => p.Data)
+                .Select(p => new PagamentoMovimentoDto(
+                    p.Id,
+                    p.Data,
+                    p.Importo,
+                    p.ContoFinanziarioId,
+                    contiById.GetValueOrDefault(p.ContoFinanziarioId),
+                    p.Note))
+                .ToList(),
+            entity.Totale,
+            entity.TotalePagato,
+            entity.Residuo,
+            entity.IsFullyPaid,
+            entity.DataPagamento);
     }
 }
 
@@ -237,6 +267,11 @@ public sealed class CreateMovimentoHandler : IRequestHandler<CreateMovimento, Gu
 
         var movimento = new MovimentoPrimaNota(input.Data, input.EsercizioAnno, input.Descrizione, input.CausaleId);
         movimento.UpdateHeader(input.Data, input.Descrizione, input.CausaleId, input.Numero, input.AnagraficaId, input.Note);
+
+        if (input.DataCompetenza is { } competenza && competenza != input.Data)
+        {
+            movimento.SetDataCompetenza(competenza);
+        }
 
         var righe = input.Righe.Select(BuildRiga).ToList();
         movimento.ReplaceRighe(righe);
@@ -289,6 +324,12 @@ public sealed class UpdateMovimentoHandler : IRequestHandler<UpdateMovimento>
 
         var input = request.Input;
         entity.UpdateHeader(input.Data, input.Descrizione, input.CausaleId, input.Numero, input.AnagraficaId, input.Note);
+
+        if (input.DataCompetenza is { } competenza && competenza != entity.DataCompetenza)
+        {
+            entity.SetDataCompetenza(competenza);
+        }
+
         entity.ReplaceRighe(input.Righe.Select(CreateMovimentoHandler.BuildRiga).ToList());
 
         await db.SaveChangesAsync(cancellationToken);

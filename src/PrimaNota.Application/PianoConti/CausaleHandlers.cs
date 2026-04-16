@@ -12,6 +12,7 @@ public sealed record CausaleDto(
     string Codice,
     string Nome,
     TipoMovimento Tipo,
+    FonteCausale? Fonte,
     Guid? CategoriaDefaultId,
     string? CategoriaDefaultNome,
     bool Attiva,
@@ -28,6 +29,9 @@ public sealed class CausaleInput
 
     /// <summary>Gets or sets the operation kind.</summary>
     public TipoMovimento Tipo { get; set; } = TipoMovimento.Pagamento;
+
+    /// <summary>Gets or sets the VAT register source (only for Incasso causali).</summary>
+    public FonteCausale? Fonte { get; set; }
 
     /// <summary>Gets or sets the default category id.</summary>
     public Guid? CategoriaDefaultId { get; set; }
@@ -90,6 +94,7 @@ public sealed class ListCausaliHandler : IRequestHandler<ListCausali, IReadOnlyL
                         c.Codice,
                         c.Nome,
                         c.Tipo,
+                        c.Fonte,
                         c.CategoriaDefaultId,
                         cat != null ? cat.Nome : null,
                         c.Attiva,
@@ -117,6 +122,7 @@ public sealed class CreateCausaleHandler : IRequestHandler<CreateCausale, Guid>
             request.Input.Codice,
             request.Input.Nome,
             request.Input.Tipo,
+            request.Input.Fonte,
             request.Input.CategoriaDefaultId,
             request.Input.Note);
         db.Causali.Add(entity);
@@ -155,6 +161,7 @@ public sealed class UpdateCausaleHandler : IRequestHandler<UpdateCausale>
             request.Input.Codice,
             request.Input.Nome,
             request.Input.Tipo,
+            request.Input.Fonte,
             request.Input.CategoriaDefaultId,
             request.Input.Note);
         await db.SaveChangesAsync(cancellationToken);

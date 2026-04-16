@@ -16,6 +16,7 @@ internal sealed class MovimentoPrimaNotaConfiguration : IEntityTypeConfiguration
         builder.Property(m => m.Id).ValueGeneratedNever();
 
         builder.Property(m => m.Data).IsRequired();
+        builder.Property(m => m.DataCompetenza).IsRequired();
         builder.Property(m => m.EsercizioAnno).IsRequired();
         builder.Property(m => m.Descrizione).IsRequired().HasMaxLength(500);
         builder.Property(m => m.Numero).HasMaxLength(64);
@@ -35,6 +36,7 @@ internal sealed class MovimentoPrimaNotaConfiguration : IEntityTypeConfiguration
 
         builder.HasIndex(m => m.EsercizioAnno);
         builder.HasIndex(m => new { m.EsercizioAnno, m.Data });
+        builder.HasIndex(m => new { m.EsercizioAnno, m.DataCompetenza });
         builder.HasIndex(m => m.Stato);
         builder.HasIndex(m => m.CausaleId);
         builder.HasIndex(m => m.AnagraficaId);
@@ -113,6 +115,28 @@ internal sealed class MovimentoPrimaNotaConfiguration : IEntityTypeConfiguration
             a.Property(x => x.UploadedBy).HasMaxLength(450);
 
             a.HasIndex(x => x.HashSha256);
+        });
+
+        // Owned collection: Pagamenti (partial settlements against this movement)
+        builder.OwnsMany(m => m.Pagamenti, p =>
+        {
+            p.ToTable("PagamentiMovimento");
+            p.WithOwner().HasForeignKey(x => x.MovimentoId);
+            p.HasKey(x => x.Id);
+            p.Property(x => x.Id).ValueGeneratedNever();
+            p.Property(x => x.MovimentoId).IsRequired();
+            p.Property(x => x.Data).IsRequired();
+            p.Property(x => x.Importo).HasPrecision(18, 2).IsRequired();
+            p.Property(x => x.ContoFinanziarioId).IsRequired();
+            p.Property(x => x.Note).HasMaxLength(500);
+
+            p.HasIndex(x => x.Data);
+            p.HasIndex(x => x.ContoFinanziarioId);
+
+            p.HasOne<Domain.ContiFinanziari.ContoFinanziario>()
+                .WithMany()
+                .HasForeignKey(x => x.ContoFinanziarioId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

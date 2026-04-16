@@ -40,6 +40,9 @@ public sealed class Causale : AuditableEntity<Guid>
     /// <summary>Gets the operation kind.</summary>
     public TipoMovimento Tipo { get; private set; }
 
+    /// <summary>Gets the VAT register source (only meaningful for <see cref="TipoMovimento.Incasso"/> causali).</summary>
+    public FonteCausale? Fonte { get; private set; }
+
     /// <summary>Gets the default Categoria id suggested when applying this causale.</summary>
     public Guid? CategoriaDefaultId { get; private set; }
 
@@ -53,9 +56,10 @@ public sealed class Causale : AuditableEntity<Guid>
     /// <param name="codice">Code.</param>
     /// <param name="nome">Name.</param>
     /// <param name="tipo">Operation kind.</param>
+    /// <param name="fonte">VAT register source (nullable, meaningful only for Incasso).</param>
     /// <param name="categoriaDefaultId">Default category id (nullable).</param>
     /// <param name="note">Notes.</param>
-    public void Update(string codice, string nome, TipoMovimento tipo, Guid? categoriaDefaultId, string? note)
+    public void Update(string codice, string nome, TipoMovimento tipo, FonteCausale? fonte, Guid? categoriaDefaultId, string? note)
     {
         if (string.IsNullOrWhiteSpace(codice))
         {
@@ -70,6 +74,7 @@ public sealed class Causale : AuditableEntity<Guid>
         Codice = codice.Trim().ToUpperInvariant();
         Nome = nome.Trim();
         Tipo = tipo;
+        Fonte = tipo == TipoMovimento.Incasso ? fonte : null;
         CategoriaDefaultId = categoriaDefaultId;
         Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
     }

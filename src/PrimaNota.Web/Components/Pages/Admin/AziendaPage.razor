@@ -1,0 +1,179 @@
+@page "/admin/azienda"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireAdmin)]
+@using MediatR
+@using PrimaNota.Application.Azienda
+@using PrimaNota.Domain.Iva
+@inject IMediator Mediator
+@inject ISnackbar Snackbar
+
+<PageTitle>Dati azienda · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Dati aziendali</MudText>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Identificazione, indirizzo e regime IVA usati dall'applicazione. Il regime di esigibilità
+    (Immediata / per Cassa) determina il calcolo della liquidazione periodica.
+</MudText>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (model is not null)
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="0" Style="max-width: 960px;">
+        <MudText Typo="Typo.h6" GutterBottom="true">Identificazione</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="8">
+                <MudTextField @bind-Value="model.Denominazione"
+                              Label="Denominazione"
+                              Required="true"
+                              MaxLength="200" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="EsigibilitaIva" @bind-Value="model.EsigibilitaIvaPredefinita"
+                           Label="Esigibilità IVA">
+                    <MudSelectItem Value="EsigibilitaIva.Immediata">Immediata</MudSelectItem>
+                    <MudSelectItem Value="EsigibilitaIva.Cassa">Per cassa</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="model.PartitaIva" Label="Partita IVA" MaxLength="16" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="model.CodiceFiscale" Label="Codice fiscale" MaxLength="16" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudTextField @bind-Value="model.Email" Label="Email" MaxLength="254" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudTextField @bind-Value="model.Pec" Label="PEC" MaxLength="254" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudTextField @bind-Value="model.Telefono" Label="Telefono" MaxLength="32" />
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.h6" GutterBottom="true">Sede legale</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="8">
+                <MudTextField @bind-Value="model.IndirizzoVia" Label="Via" MaxLength="200" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudTextField @bind-Value="model.IndirizzoCap" Label="CAP" MaxLength="10" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="model.IndirizzoCitta" Label="Città" MaxLength="100" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudTextField @bind-Value="model.IndirizzoProvincia" Label="Provincia" MaxLength="4" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudTextField @bind-Value="model.IndirizzoCountryCode" Label="Paese (ISO-2)" MaxLength="2" Required="true" />
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="SaveAsync"
+                   Disabled="saving">
+            Salva
+        </MudButton>
+    </MudPaper>
+}
+
+@code {
+    private bool loading = true;
+    private bool saving;
+    private FormModel? model;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var dto = await Mediator.Send(new GetConfigurazioneAzienda());
+            model = FormModel.FromDto(dto);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (model is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(model.Denominazione))
+        {
+            Snackbar.Add("Denominazione obbligatoria.", Severity.Warning);
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            await Mediator.Send(new UpdateConfigurazioneAzienda(
+                model.Denominazione!,
+                model.PartitaIva,
+                model.CodiceFiscale,
+                model.IndirizzoVia,
+                model.IndirizzoCap,
+                model.IndirizzoCitta,
+                model.IndirizzoProvincia,
+                string.IsNullOrWhiteSpace(model.IndirizzoCountryCode) ? "IT" : model.IndirizzoCountryCode!,
+                model.Email,
+                model.Telefono,
+                model.Pec,
+                model.EsigibilitaIvaPredefinita));
+            Snackbar.Add("Configurazione aggiornata.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private sealed class FormModel
+    {
+        public string? Denominazione { get; set; }
+        public string? PartitaIva { get; set; }
+        public string? CodiceFiscale { get; set; }
+        public string? IndirizzoVia { get; set; }
+        public string? IndirizzoCap { get; set; }
+        public string? IndirizzoCitta { get; set; }
+        public string? IndirizzoProvincia { get; set; }
+        public string? IndirizzoCountryCode { get; set; } = "IT";
+        public string? Email { get; set; }
+        public string? Telefono { get; set; }
+        public string? Pec { get; set; }
+        public EsigibilitaIva EsigibilitaIvaPredefinita { get; set; } = EsigibilitaIva.Immediata;
+
+        public static FormModel FromDto(ConfigurazioneAziendaDto dto) => new()
+        {
+            Denominazione = dto.Denominazione,
+            PartitaIva = dto.PartitaIva,
+            CodiceFiscale = dto.CodiceFiscale,
+            IndirizzoVia = dto.IndirizzoVia,
+            IndirizzoCap = dto.IndirizzoCap,
+            IndirizzoCitta = dto.IndirizzoCitta,
+            IndirizzoProvincia = dto.IndirizzoProvincia,
+            IndirizzoCountryCode = dto.IndirizzoCountryCode,
+            Email = dto.Email,
+            Telefono = dto.Telefono,
+            Pec = dto.Pec,
+            EsigibilitaIvaPredefinita = dto.EsigibilitaIvaPredefinita,
+        };
+    }
+}

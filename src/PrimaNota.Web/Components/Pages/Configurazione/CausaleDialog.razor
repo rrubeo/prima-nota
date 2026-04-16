@@ -18,6 +18,15 @@
                         }
                     </MudSelect>
                 </MudItem>
+                @if (model.Tipo == TipoMovimento.Incasso)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="FonteCausale?" @bind-Value="model.Fonte" Label="Registro IVA" Clearable="true">
+                            <MudSelectItem T="FonteCausale?" Value="@((FonteCausale?)FonteCausale.Fattura)">Vendite (fattura)</MudSelectItem>
+                            <MudSelectItem T="FonteCausale?" Value="@((FonteCausale?)FonteCausale.Corrispettivo)">Corrispettivi</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                }
                 <MudItem xs="12" sm="6">
                     <MudSelect T="Guid?" @bind-Value="model.CategoriaDefaultId" Label="Categoria di default" Clearable="true">
                         <MudSelectItem T="Guid?" Value="@((Guid?)null)">— nessuna —</MudSelectItem>
@@ -62,6 +71,7 @@
                 Codice = Existing.Codice,
                 Nome = Existing.Nome,
                 Tipo = Existing.Tipo,
+                Fonte = Existing.Fonte,
                 CategoriaDefaultId = Existing.CategoriaDefaultId,
                 Note = Existing.Note,
             };

@@ -1,0 +1,194 @@
+@page "/anagrafiche/{Id:guid}/scheda"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.Anagrafiche
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+@inject NavigationManager Navigation
+
+<PageTitle>Scheda @scheda?.RagioneSociale · Prima Nota</PageTitle>
+
+<div class="d-flex align-center gap-3 mb-3">
+    <MudText Typo="Typo.h4">Scheda conto</MudText>
+    @if (scheda is not null)
+    {
+        <MudText Typo="Typo.h5" Class="mud-text-secondary">@scheda.RagioneSociale</MudText>
+    }
+    <MudSpacer />
+    <MudButton StartIcon="@Icons.Material.Filled.Edit" Variant="Variant.Text"
+               OnClick="@(() => Navigation.NavigateTo($"/anagrafiche/{Id}"))">
+        Apri anagrafica
+    </MudButton>
+</div>
+
+<MudPaper Class="pa-4 mb-4" Elevation="0">
+    <MudGrid>
+        <MudItem xs="12" sm="3">
+            <MudSelect T="int?" @bind-Value="anno" Label="Anno" Clearable="true"
+                       ToStringFunc="@(v => v?.ToString(CultureInfo.InvariantCulture) ?? "Tutti")"
+                       Dense="true">
+                <MudSelectItem T="int?" Value="@((int?)null)">Tutti</MudSelectItem>
+                @for (var a = Esercizio.Anno; a >= Esercizio.Anno - 5; a--)
+                {
+                    var val = a;
+                    <MudSelectItem T="int?" Value="@((int?)val)">@val</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="3">
+            <MudDatePicker Label="Da" Date="@DateOnlyToDate(dataFrom)"
+                           DateChanged="@(d => dataFrom = d.HasValue ? DateOnly.FromDateTime(d.Value) : null)"
+                           Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" sm="3">
+            <MudDatePicker Label="A" Date="@DateOnlyToDate(dataTo)"
+                           DateChanged="@(d => dataTo = d.HasValue ? DateOnly.FromDateTime(d.Value) : null)"
+                           Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" sm="3" Class="d-flex align-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadAsync">
+                Aggiorna
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (scheda is null)
+{
+    <MudAlert Severity="Severity.Warning">Anagrafica non trovata.</MudAlert>
+}
+else if (scheda.Righe.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">Nessun movimento registrato per i criteri selezionati.</MudAlert>
+}
+else
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="4">
+            <div class="pn-kpi-card">
+                <div class="pn-kpi-icon pn-icon-blue">
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Large" />
+                </div>
+                <div class="pn-kpi-body">
+                    <div class="pn-kpi-label">Dare</div>
+                    <div class="pn-kpi-value">@FormatCurrency(scheda.Dare)</div>
+                </div>
+            </div>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <div class="pn-kpi-card">
+                <div class="pn-kpi-icon pn-icon-red">
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Large" />
+                </div>
+                <div class="pn-kpi-body">
+                    <div class="pn-kpi-label">Avere</div>
+                    <div class="pn-kpi-value">@FormatCurrency(scheda.Avere)</div>
+                </div>
+            </div>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <div class="pn-kpi-card">
+                <div class="pn-kpi-icon @(scheda.SaldoFinale >= 0 ? "pn-icon-indigo" : "pn-icon-red")">
+                    <MudIcon Icon="@Icons.Material.Filled.Calculate" Size="Size.Large" />
+                </div>
+                <div class="pn-kpi-body">
+                    <div class="pn-kpi-label">Saldo</div>
+                    <div class="pn-kpi-value">
+                        @FormatCurrency(Math.Abs(scheda.SaldoFinale))
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@(scheda.SaldoFinale >= 0 ? Color.Info : Color.Warning)"
+                                 Class="ml-2">
+                            @(scheda.SaldoFinale >= 0 ? "a credito (ci deve)" : "a debito (dobbiamo)")
+                        </MudChip>
+                    </div>
+                </div>
+            </div>
+        </MudItem>
+    </MudGrid>
+
+    <MudTable Items="scheda.Righe" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Data</MudTh>
+            <MudTh>Tipo</MudTh>
+            <MudTh>Descrizione</MudTh>
+            <MudTh>Numero</MudTh>
+            <MudTh Style="text-align:right">Dare</MudTh>
+            <MudTh Style="text-align:right">Avere</MudTh>
+            <MudTh Style="text-align:right">Saldo</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Data.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small"
+                         Color="@(context.Tipo == SchedaRigaTipo.Fattura ? Color.Primary : Color.Success)">
+                    @context.Tipo
+                </MudChip>
+            </MudTd>
+            <MudTd>@context.Descrizione</MudTd>
+            <MudTd>@context.Numero</MudTd>
+            <MudTd Style="text-align:right">@(context.Dare > 0m ? FormatCurrency(context.Dare) : string.Empty)</MudTd>
+            <MudTd Style="text-align:right">@(context.Avere > 0m ? FormatCurrency(context.Avere) : string.Empty)</MudTd>
+            <MudTd Style="text-align:right">
+                <span style="color:@(context.Saldo >= 0 ? "#111827" : "#f87171")">@FormatCurrency(context.Saldo)</span>
+            </MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small"
+                               OnClick="@(() => Navigation.NavigateTo($"/movimenti/{context.MovimentoId}"))" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+<style>
+    .pn-kpi-card { background: #fff; border: 1px solid #f3f4f6; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); padding: 1.25rem; display: flex; align-items: center; gap: 1rem; min-height: 100%; }
+    .pn-kpi-icon { width: 3rem; height: 3rem; border-radius: 9999px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .pn-icon-indigo { background: #eef2ff; color: #6366f1; }
+    .pn-icon-blue   { background: #eff6ff; color: #3b82f6; }
+    .pn-icon-red    { background: #fef2f2; color: #f87171; }
+    .pn-kpi-body { flex: 1; }
+    .pn-kpi-label { color: #6b7280; font-size: .875rem; font-weight: 500; margin-bottom: .25rem; }
+    .pn-kpi-value { display: flex; align-items: baseline; gap: .5rem; font-size: 1.5rem; font-weight: 700; color: #111827; }
+</style>
+
+@code {
+    private static readonly CultureInfo ItCulture = new("it-IT");
+
+    [Parameter] public Guid Id { get; set; }
+
+    private bool loading = true;
+    private SchedaAnagraficaDto? scheda;
+    private int? anno;
+    private DateOnly? dataFrom;
+    private DateOnly? dataTo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        anno = Esercizio.Anno;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        try
+        {
+            scheda = await Mediator.Send(new GetSchedaAnagrafica(Id, anno, dataFrom, dataTo));
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private static string FormatCurrency(decimal v) => v.ToString("N2", ItCulture) + " €";
+
+    private static DateTime? DateOnlyToDate(DateOnly? d) => d?.ToDateTime(TimeOnly.MinValue);
+}

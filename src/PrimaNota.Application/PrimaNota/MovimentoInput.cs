@@ -8,6 +8,9 @@ public sealed class MovimentoInput
     /// <summary>Gets or sets the movement date.</summary>
     public DateOnly Data { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
 
+    /// <summary>Gets or sets the VAT competence date. When null the handler falls back to <see cref="Data"/>.</summary>
+    public DateOnly? DataCompetenza { get; set; }
+
     /// <summary>Gets or sets the fiscal year (inferred from Data when creating).</summary>
     public int EsercizioAnno { get; set; }
 

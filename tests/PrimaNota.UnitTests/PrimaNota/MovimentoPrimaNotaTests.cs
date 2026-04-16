@@ -172,6 +172,82 @@ public sealed class MovimentoPrimaNotaTests
     }
 
     [Fact]
+    public void AddPagamento_Should_Reduce_Residuo_And_Update_DataPagamento()
+    {
+        var mov = NewDraft();
+        mov.ReplaceRighe(new[] { new RigaMovimento(-1000m, Conto1, Categoria1) });
+        mov.Confirm();
+
+        mov.Residuo.Should().Be(1000m);
+        mov.IsFullyPaid.Should().BeFalse();
+        mov.DataPagamento.Should().BeNull();
+
+        mov.AddPagamento(new PagamentoMovimento(new DateOnly(2026, 1, 15), 300m, Conto2));
+
+        mov.TotalePagato.Should().Be(300m);
+        mov.Residuo.Should().Be(700m);
+        mov.IsFullyPaid.Should().BeFalse();
+        mov.DataPagamento.Should().BeNull();
+
+        mov.AddPagamento(new PagamentoMovimento(new DateOnly(2026, 2, 28), 700m, Conto2));
+
+        mov.TotalePagato.Should().Be(1000m);
+        mov.Residuo.Should().Be(0m);
+        mov.IsFullyPaid.Should().BeTrue();
+        mov.DataPagamento.Should().Be(new DateOnly(2026, 2, 28));
+    }
+
+    [Fact]
+    public void AddPagamento_OverPayment_Should_Throw()
+    {
+        var mov = NewDraft();
+        mov.ReplaceRighe(new[] { new RigaMovimento(-100m, Conto1, Categoria1) });
+        mov.Confirm();
+
+        var act = () => mov.AddPagamento(new PagamentoMovimento(new DateOnly(2026, 1, 15), 150m, Conto2));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*supera il residuo*");
+    }
+
+    [Fact]
+    public void AddPagamento_On_Reconciled_Should_Throw()
+    {
+        var mov = NewDraft();
+        mov.ReplaceRighe(new[] { new RigaMovimento(-100m, Conto1, Categoria1) });
+        mov.Confirm();
+        mov.MarkReconciled();
+
+        var act = () => mov.AddPagamento(new PagamentoMovimento(new DateOnly(2026, 1, 15), 50m, Conto2));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*riconciliato*");
+    }
+
+    [Fact]
+    public void RemovePagamento_Should_Restore_Residuo()
+    {
+        var mov = NewDraft();
+        mov.ReplaceRighe(new[] { new RigaMovimento(-500m, Conto1, Categoria1) });
+        mov.Confirm();
+        var pag = new PagamentoMovimento(new DateOnly(2026, 1, 15), 500m, Conto2);
+        mov.AddPagamento(pag);
+
+        mov.IsFullyPaid.Should().BeTrue();
+        var removed = mov.RemovePagamento(pag.Id);
+
+        removed.Should().NotBeNull();
+        mov.Residuo.Should().Be(500m);
+        mov.IsFullyPaid.Should().BeFalse();
+        mov.DataPagamento.Should().BeNull();
+    }
+
+    [Fact]
+    public void PagamentoMovimento_With_Non_Positive_Importo_Should_Throw()
+    {
+        var act = () => new PagamentoMovimento(new DateOnly(2026, 1, 1), 0m, Conto1);
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
     public void RigaMovimento_With_Zero_Importo_Should_Throw()
     {
         var act = () => new RigaMovimento(0m, Conto1, Categoria1);

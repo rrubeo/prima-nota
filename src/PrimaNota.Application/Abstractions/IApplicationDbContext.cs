@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using PrimaNota.Domain.Anagrafiche;
+using PrimaNota.Domain.Azienda;
 using PrimaNota.Domain.ContiFinanziari;
 using PrimaNota.Domain.Esercizi;
 using PrimaNota.Domain.Iva;
@@ -39,6 +40,9 @@ public interface IApplicationDbContext
 
     /// <summary>Gets the <see cref="EsercizioContabile"/> set.</summary>
     DbSet<EsercizioContabile> Esercizi { get; }
+
+    /// <summary>Gets the <see cref="ConfigurazioneAzienda"/> singleton set.</summary>
+    DbSet<ConfigurazioneAzienda> ConfigurazioneAzienda { get; }
 
     /// <summary>Persists pending changes to the underlying store.</summary>
     /// <param name="cancellationToken">Token to cancel the operation.</param>

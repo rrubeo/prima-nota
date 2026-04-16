@@ -32,15 +32,21 @@ else
     <MudPaper Class="pa-4 mb-4" Elevation="0">
         <MudGrid>
             <MudItem xs="12" sm="3">
-                <MudDatePicker Label="Data"
+                <MudDatePicker Label="Data registrazione"
                                Date="@DateOnlyToDate(model.Data)"
-                               DateChanged="@(d => { if (d.HasValue) { model.Data = DateOnly.FromDateTime(d.Value); model.EsercizioAnno = model.Data.Year; } })"
+                               DateChanged="@(d => { if (d.HasValue) { model.Data = DateOnly.FromDateTime(d.Value); model.EsercizioAnno = model.Data.Year; if (model.DataCompetenza is null) model.DataCompetenza = model.Data; } })"
                                Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudDatePicker Label="Data competenza IVA"
+                               Date="@DateOnlyToDate(model.DataCompetenza ?? model.Data)"
+                               DateChanged="@(d => { if (d.HasValue) { model.DataCompetenza = DateOnly.FromDateTime(d.Value); } })"
+                               HelperText="Per fatture XML = data documento" />
             </MudItem>
             <MudItem xs="12" sm="3">
                 <MudTextField @bind-Value="model.Numero" Label="Numero (fattura, ricevuta...)" />
             </MudItem>
-            <MudItem xs="12" sm="6">
+            <MudItem xs="12" sm="3">
                 <MudSelect T="Guid" @bind-Value="model.CausaleId" Label="Causale" Required="true"
                            ToStringFunc="@FormatCausale">
                     @foreach (var c in causali)
@@ -194,6 +200,82 @@ else
         </MudPaper>
     }
 
+    @if (Id.HasValue && stato != StatoMovimento.Reconciled)
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="0">
+            <div class="d-flex align-center mb-3 gap-3">
+                <MudText Typo="Typo.h6">Pagamenti / incassi</MudText>
+                <MudChip T="string" Size="Size.Small" Color="@(isFullyPaid ? Color.Success : Color.Warning)">
+                    @(isFullyPaid
+                        ? $"Saldato il {(dataPagamento?.ToString("dd/MM/yyyy") ?? "-")}"
+                        : $"Residuo {FormatCurrency(residuo)}")
+                </MudChip>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Totale fattura @FormatCurrency(Math.Abs(totaleLordo)) · Incassato/Pagato @FormatCurrency(totalePagato)
+                </MudText>
+            </div>
+
+            <MudGrid Class="mb-2">
+                <MudItem xs="12" sm="3">
+                    <MudDatePicker Label="Data pagamento"
+                                   Date="@DateOnlyToDate(newPagamentoData)"
+                                   DateChanged="@(d => { if (d.HasValue) { newPagamentoData = DateOnly.FromDateTime(d.Value); } })" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudNumericField T="decimal" @bind-Value="newPagamentoImporto"
+                                     Label="Importo €" HideSpinButtons="true" Min="0m" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="Guid" @bind-Value="newPagamentoContoId" Label="Conto" ToStringFunc="@FormatConto">
+                        @foreach (var c in conti)
+                        {
+                            <MudSelectItem T="Guid" Value="@c.Id">@c.Codice — @c.Nome</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="2" Class="d-flex align-end">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="AddPagamentoAsync"
+                               Disabled="@(savingPagamento || residuo <= 0.01m)">
+                        Registra
+                    </MudButton>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="newPagamentoNote" Label="Note (opzionale)" />
+                </MudItem>
+            </MudGrid>
+
+            @if (pagamenti.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Nessun pagamento registrato.</MudText>
+            }
+            else
+            {
+                <MudTable Items="pagamenti" Dense="true" Hover="true" Breakpoint="Breakpoint.None">
+                    <HeaderContent>
+                        <MudTh Style="width:110px">Data</MudTh>
+                        <MudTh Style="width:130px">Importo</MudTh>
+                        <MudTh>Conto</MudTh>
+                        <MudTh>Note</MudTh>
+                        <MudTh Style="width:50px"></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.Data.ToString("dd/MM/yyyy")</MudTd>
+                        <MudTd>@FormatCurrency(context.Importo)</MudTd>
+                        <MudTd>@context.ContoFinanziarioNome</MudTd>
+                        <MudTd>@context.Note</MudTd>
+                        <MudTd>
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                           Color="Color.Error"
+                                           OnClick="@(() => RemovePagamentoAsync(context))" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    }
+
     <MudStack Row="true" Spacing="2">
         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
                    OnClick="SaveAsync" Disabled="@(saving || !IsEditable)">
@@ -244,6 +326,19 @@ else
     private IReadOnlyList<ContoFinanziarioListItemDto> conti = Array.Empty<ContoFinanziarioListItemDto>();
     private IReadOnlyList<AnagraficaListItemDto> anagrafiche = Array.Empty<AnagraficaListItemDto>();
     private IReadOnlyList<AllegatoDto> allegati = Array.Empty<AllegatoDto>();
+    private IReadOnlyList<PagamentoMovimentoDto> pagamenti = Array.Empty<PagamentoMovimentoDto>();
+
+    private decimal totaleLordo;
+    private decimal totalePagato;
+    private decimal residuo;
+    private bool isFullyPaid;
+    private DateOnly? dataPagamento;
+
+    private DateOnly newPagamentoData = DateOnly.FromDateTime(DateTime.UtcNow);
+    private decimal newPagamentoImporto;
+    private Guid newPagamentoContoId;
+    private string? newPagamentoNote;
+    private bool savingPagamento;
 
     private string Title => Id.HasValue ? "Modifica movimento" : "Nuovo movimento";
     private bool IsEditable => stato == StatoMovimento.Draft;
@@ -341,9 +436,16 @@ else
                 stato = dto.Stato;
                 rowVersion = dto.RowVersion;
                 allegati = dto.Allegati;
+                pagamenti = dto.Pagamenti;
+                totaleLordo = dto.Totale;
+                totalePagato = dto.TotalePagato;
+                residuo = dto.Residuo;
+                isFullyPaid = dto.IsFullyPaid;
+                dataPagamento = dto.DataPagamento;
                 model = new MovimentoInput
                 {
                     Data = dto.Data,
+                    DataCompetenza = dto.DataCompetenza,
                     EsercizioAnno = dto.EsercizioAnno,
                     Descrizione = dto.Descrizione,
                     Numero = dto.Numero,
@@ -470,6 +572,72 @@ else
         stato = dto.Stato;
         rowVersion = dto.RowVersion;
         allegati = dto.Allegati;
+        pagamenti = dto.Pagamenti;
+        totaleLordo = dto.Totale;
+        totalePagato = dto.TotalePagato;
+        residuo = dto.Residuo;
+        isFullyPaid = dto.IsFullyPaid;
+        dataPagamento = dto.DataPagamento;
+    }
+
+    private async Task AddPagamentoAsync()
+    {
+        if (!Id.HasValue) return;
+        if (newPagamentoImporto <= 0m)
+        {
+            Snackbar.Add("Importo del pagamento deve essere positivo.", Severity.Warning);
+            return;
+        }
+
+        if (newPagamentoContoId == Guid.Empty)
+        {
+            Snackbar.Add("Seleziona il conto.", Severity.Warning);
+            return;
+        }
+
+        savingPagamento = true;
+        try
+        {
+            await Mediator.Send(new AddPagamentoMovimento(
+                Id.Value,
+                newPagamentoData,
+                newPagamentoImporto,
+                newPagamentoContoId,
+                newPagamentoNote));
+            Snackbar.Add("Pagamento registrato.", Severity.Success);
+            newPagamentoImporto = 0m;
+            newPagamentoNote = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            savingPagamento = false;
+        }
+    }
+
+    private async Task RemovePagamentoAsync(PagamentoMovimentoDto p)
+    {
+        if (!Id.HasValue) return;
+        var confirmed = await Dialog.ShowMessageBox(
+            "Conferma eliminazione",
+            $"Eliminare il pagamento del {p.Data:dd/MM/yyyy} di {FormatCurrency(p.Importo)}?",
+            yesText: "Elimina", cancelText: "Annulla");
+        if (confirmed != true) return;
+
+        try
+        {
+            await Mediator.Send(new RemovePagamentoMovimento(Id.Value, p.Id));
+            Snackbar.Add("Pagamento rimosso.", Severity.Info);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OnAllegatoSelected(InputFileChangeEventArgs e)

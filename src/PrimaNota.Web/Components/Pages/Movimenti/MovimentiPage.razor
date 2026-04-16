@@ -77,18 +77,19 @@
           Striped="true"
           Virtualize="true"
           FixedHeader="true"
-          Height="calc(100vh - 340px)">
+          Class="pn-table-compact"
+          Height="calc(100vh - 240px)">
     <HeaderContent>
-        <MudTh>Data</MudTh>
-        <MudTh>Causale</MudTh>
-        <MudTh>Descrizione</MudTh>
-        <MudTh>Numero</MudTh>
-        <MudTh>Anagrafica</MudTh>
-        <MudTh Style="text-align:right">Totale</MudTh>
-        <MudTh>Righe</MudTh>
-        <MudTh>Allegati</MudTh>
-        <MudTh>Stato</MudTh>
-        <MudTh Style="width:80px;"></MudTh>
+        <MudTh Style="width:90px; white-space:nowrap">Data</MudTh>
+        <MudTh Style="width:130px; white-space:nowrap">Causale</MudTh>
+        <MudTh Style="white-space:nowrap">Descrizione</MudTh>
+        <MudTh Style="width:80px; white-space:nowrap">N.</MudTh>
+        <MudTh Style="white-space:nowrap">Anagrafica</MudTh>
+        <MudTh Style="width:120px; text-align:right; white-space:nowrap">Totale</MudTh>
+        <MudTh Style="width:40px; text-align:center; white-space:nowrap">R.</MudTh>
+        <MudTh Style="width:40px; text-align:center; white-space:nowrap">All.</MudTh>
+        <MudTh Style="width:100px; white-space:nowrap">Stato</MudTh>
+        <MudTh Style="width:50px"></MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd>@context.Data.ToString("dd/MM/yyyy", ItCulture)</MudTd>
@@ -99,16 +100,15 @@
         <MudTd>@context.Descrizione</MudTd>
         <MudTd>@context.Numero</MudTd>
         <MudTd>@context.AnagraficaRagioneSociale</MudTd>
-        <MudTd Style="text-align:right; font-family: monospace; font-weight: 600;"
+        <MudTd Style="text-align:right; font-family: monospace; font-weight: 600; white-space:nowrap"
                class="@(context.Totale < 0 ? "mud-error-text" : (context.Totale > 0 ? "mud-success-text" : ""))">
             @FormatCurrency(context.Totale)
         </MudTd>
-        <MudTd>@context.NumeroRighe</MudTd>
-        <MudTd>
+        <MudTd Style="text-align:center">@context.NumeroRighe</MudTd>
+        <MudTd Style="text-align:center">
             @if (context.AllegatiCount > 0)
             {
-                <MudIcon Icon="@Icons.Material.Filled.AttachFile" Size="Size.Small" />
-                <span>@context.AllegatiCount</span>
+                <MudIcon Icon="@Icons.Material.Filled.AttachFile" Size="Size.Small" />@context.AllegatiCount
             }
         </MudTd>
         <MudTd>
@@ -130,6 +130,11 @@
         <MudText Class="pa-6">Nessun movimento per i filtri selezionati.</MudText>
     </NoRecordsContent>
 </MudTable>
+
+<style>
+    .pn-table-compact .mud-table-cell,
+    .pn-table-compact .mud-table-head .mud-table-cell { font-size: 0.8125rem; padding-top: 4px; padding-bottom: 4px; }
+</style>
 
 @code {
     private static readonly CultureInfo ItCulture = new("it-IT");

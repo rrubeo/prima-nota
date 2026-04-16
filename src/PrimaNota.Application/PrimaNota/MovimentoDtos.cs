@@ -14,12 +14,15 @@ public sealed record MovimentoListItemDto(
     decimal Totale,
     int NumeroRighe,
     StatoMovimento Stato,
-    int AllegatiCount);
+    int AllegatiCount,
+    decimal Residuo,
+    bool IsFullyPaid);
 
 /// <summary>Detail projection for the edit page.</summary>
 public sealed record MovimentoDto(
     Guid Id,
     DateOnly Data,
+    DateOnly DataCompetenza,
     int EsercizioAnno,
     string Descrizione,
     string? Numero,
@@ -29,7 +32,13 @@ public sealed record MovimentoDto(
     string? Note,
     byte[] RowVersion,
     IReadOnlyList<RigaMovimentoDto> Righe,
-    IReadOnlyList<AllegatoDto> Allegati);
+    IReadOnlyList<AllegatoDto> Allegati,
+    IReadOnlyList<PagamentoMovimentoDto> Pagamenti,
+    decimal Totale,
+    decimal TotalePagato,
+    decimal Residuo,
+    bool IsFullyPaid,
+    DateOnly? DataPagamento);
 
 /// <summary>Line projection.</summary>
 public sealed record RigaMovimentoDto(
@@ -48,3 +57,18 @@ public sealed record AllegatoDto(
     string MimeType,
     long Size,
     DateTimeOffset UploadedAt);
+
+/// <summary>Payment projection.</summary>
+/// <param name="Id">Payment id.</param>
+/// <param name="Data">Value date.</param>
+/// <param name="Importo">Positive settlement amount.</param>
+/// <param name="ContoFinanziarioId">Financial account.</param>
+/// <param name="ContoFinanziarioNome">Financial account display name.</param>
+/// <param name="Note">Optional note.</param>
+public sealed record PagamentoMovimentoDto(
+    Guid Id,
+    DateOnly Data,
+    decimal Importo,
+    Guid ContoFinanziarioId,
+    string? ContoFinanziarioNome,
+    string? Note);

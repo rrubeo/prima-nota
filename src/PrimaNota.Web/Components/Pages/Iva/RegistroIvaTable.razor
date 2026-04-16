@@ -6,19 +6,19 @@
           Dense="true"
           Loading="Loading"
           Striped="true"
-          Class="mt-3"
+          Class="mt-3 pn-registro-table"
           Breakpoint="Breakpoint.None">
     <HeaderContent>
-        <MudTh>Data</MudTh>
-        <MudTh>Numero</MudTh>
-        <MudTh>Causale</MudTh>
-        <MudTh>Controparte</MudTh>
-        <MudTh>P.IVA / CF</MudTh>
-        <MudTh>Descrizione</MudTh>
-        <MudTh>Aliquota</MudTh>
-        <MudTh Style="text-align:right">Imponibile</MudTh>
-        <MudTh Style="text-align:right">Imposta</MudTh>
-        <MudTh Style="text-align:right">Totale</MudTh>
+        <MudTh Style="width:90px; white-space:nowrap">Data</MudTh>
+        <MudTh Style="width:80px; white-space:nowrap">Numero</MudTh>
+        <MudTh Style="width:70px; white-space:nowrap">Causale</MudTh>
+        <MudTh Style="white-space:nowrap">Controparte</MudTh>
+        <MudTh Style="width:120px; white-space:nowrap">P.IVA / CF</MudTh>
+        <MudTh Style="white-space:nowrap">Descrizione</MudTh>
+        <MudTh Style="width:100px; white-space:nowrap">Aliquota</MudTh>
+        <MudTh Style="width:110px; text-align:right; white-space:nowrap">Imponibile</MudTh>
+        <MudTh Style="width:100px; text-align:right; white-space:nowrap">Imposta</MudTh>
+        <MudTh Style="width:110px; text-align:right; white-space:nowrap">Totale</MudTh>
     </HeaderContent>
     <RowTemplate>
         <MudTd>@context.Data.ToString("dd/MM/yyyy", ItCulture)</MudTd>
@@ -34,18 +34,33 @@
         <MudTd Style="text-align:right; font-family: monospace;">@FormatCurrency(context.Imposta)</MudTd>
         <MudTd Style="text-align:right; font-family: monospace; font-weight: 600;">@FormatCurrency(context.Lordo)</MudTd>
     </RowTemplate>
-    <FooterContent>
-        <MudTFootRow>
-            <MudTd colspan="7" Style="text-align:right; font-weight: 600;">Totali</MudTd>
-            <MudTd Style="text-align:right; font-family: monospace; font-weight: 700;">@FormatCurrency(Righe.Sum(r => r.Imponibile))</MudTd>
-            <MudTd Style="text-align:right; font-family: monospace; font-weight: 700;">@FormatCurrency(Righe.Sum(r => r.Imposta))</MudTd>
-            <MudTd Style="text-align:right; font-family: monospace; font-weight: 700;">@FormatCurrency(Righe.Sum(r => r.Lordo))</MudTd>
-        </MudTFootRow>
-    </FooterContent>
     <NoRecordsContent>
-        <MudText Typo="Typo.body2" Class="pa-6">Nessun movimento con IVA in questo periodo.</MudText>
+        <MudText Typo="Typo.body2" Class="pa-6 mud-text-secondary">Nessun movimento con IVA in questo periodo.</MudText>
     </NoRecordsContent>
 </MudTable>
+
+@if (Righe.Count > 0)
+{
+    <div class="pn-registro-totali">
+        <span class="pn-registro-totali-label">Totali</span>
+        <span class="pn-registro-totali-val">@FormatCurrency(Righe.Sum(r => r.Imponibile))</span>
+        <span class="pn-registro-totali-val">@FormatCurrency(Righe.Sum(r => r.Imposta))</span>
+        <span class="pn-registro-totali-val pn-registro-totali-bold">@FormatCurrency(Righe.Sum(r => r.Lordo))</span>
+    </div>
+}
+
+<style>
+    .pn-registro-table .mud-table-cell,
+    .pn-registro-table .mud-table-head .mud-table-cell { font-size: 0.8125rem; padding-top: 4px; padding-bottom: 4px; }
+    .pn-registro-totali {
+        display: flex; justify-content: flex-end; align-items: baseline; gap: 0;
+        padding: 12px 16px; border-top: 2px solid #e5e7eb; background: #f9fafb;
+        font-size: 0.8125rem;
+    }
+    .pn-registro-totali-label { font-weight: 700; margin-right: 16px; }
+    .pn-registro-totali-val { width: 110px; text-align: right; font-family: monospace; font-weight: 700; }
+    .pn-registro-totali-bold { font-weight: 800; }
+</style>
 
 @code {
     private static readonly CultureInfo ItCulture = new("it-IT");

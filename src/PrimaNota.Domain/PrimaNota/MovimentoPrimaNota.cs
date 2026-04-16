@@ -11,8 +11,12 @@ namespace PrimaNota.Domain.PrimaNota;
 /// </summary>
 public sealed class MovimentoPrimaNota : AuditableEntity<Guid>
 {
+    /// <summary>Tolerance (in EUR) used when deciding whether an invoice is fully paid.</summary>
+    public const decimal PagamentoTolerance = 0.01m;
+
     private readonly List<RigaMovimento> righe = new();
     private readonly List<Allegato> allegati = new();
+    private readonly List<PagamentoMovimento> pagamenti = new();
 
     /// <summary>Initializes a new instance of the <see cref="MovimentoPrimaNota"/> class.</summary>
     /// <param name="data">Business date (movement date shown to users).</param>
@@ -38,6 +42,7 @@ public sealed class MovimentoPrimaNota : AuditableEntity<Guid>
 
         Id = Guid.NewGuid();
         Data = data;
+        DataCompetenza = data;
         EsercizioAnno = anno;
         Descrizione = descrizione.Trim();
         CausaleId = causaleId;
@@ -49,8 +54,15 @@ public sealed class MovimentoPrimaNota : AuditableEntity<Guid>
     {
     }
 
-    /// <summary>Gets the movement date (business date).</summary>
+    /// <summary>Gets the movement date (data registrazione / data documento).</summary>
     public DateOnly Data { get; private set; }
+
+    /// <summary>
+    /// Gets the VAT competence date: the date used for VAT exigibility when the company
+    /// works on "esigibilità immediata". Defaults to <see cref="Data"/>; can be overridden
+    /// for imported invoices where the document date differs from the registration date.
+    /// </summary>
+    public DateOnly DataCompetenza { get; private set; }
 
     /// <summary>Gets the fiscal year this movement belongs to.</summary>
     public int EsercizioAnno { get; private set; }
@@ -82,8 +94,32 @@ public sealed class MovimentoPrimaNota : AuditableEntity<Guid>
     /// <summary>Gets the collection of attachments owned by this movement.</summary>
     public IReadOnlyList<Allegato> Allegati => allegati;
 
+    /// <summary>Gets the collection of partial payments settling this movement.</summary>
+    public IReadOnlyList<PagamentoMovimento> Pagamenti => pagamenti;
+
     /// <summary>Gets the signed total amount (sum of line amounts). Zero for internal transfers.</summary>
     public decimal Totale => righe.Sum(r => r.Importo);
+
+    /// <summary>Gets the absolute invoice total used as the denominator for settlement ratios.</summary>
+    public decimal TotaleLordo => Math.Abs(Totale);
+
+    /// <summary>Gets the sum of all settlement amounts registered so far.</summary>
+    public decimal TotalePagato => pagamenti.Sum(p => p.Importo);
+
+    /// <summary>Gets the residual amount still to be settled (<see cref="TotaleLordo"/> − <see cref="TotalePagato"/>).</summary>
+    public decimal Residuo => decimal.Round(TotaleLordo - TotalePagato, 2, MidpointRounding.ToEven);
+
+    /// <summary>Gets a value indicating whether the invoice is fully paid (within <see cref="PagamentoTolerance"/>).</summary>
+    public bool IsFullyPaid => TotaleLordo > 0m && Residuo <= PagamentoTolerance;
+
+    /// <summary>
+    /// Gets the derived "payment completed" date: the most recent <see cref="PagamentoMovimento.Data"/>
+    /// when the invoice is fully paid, otherwise null.
+    /// </summary>
+    public DateOnly? DataPagamento =>
+        IsFullyPaid && pagamenti.Count > 0
+            ? pagamenti.Max(p => p.Data)
+            : null;
 
     /// <summary>
     /// Gets a value indicating whether the movement is an internal transfer (giroconto).
@@ -129,11 +165,87 @@ public sealed class MovimentoPrimaNota : AuditableEntity<Guid>
         }
 
         Data = data;
+        if (DataCompetenza == default || DataCompetenza == Data)
+        {
+            DataCompetenza = data;
+        }
+
         Descrizione = descrizione.Trim();
         CausaleId = causaleId;
         Numero = string.IsNullOrWhiteSpace(numero) ? null : numero.Trim();
         AnagraficaId = anagraficaId;
         Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+    }
+
+    /// <summary>
+    /// Sets the VAT competence date explicitly. Used when importing an invoice whose
+    /// document date differs from the registration date.
+    /// </summary>
+    /// <param name="dataCompetenza">New competence date (must belong to the exercise).</param>
+    public void SetDataCompetenza(DateOnly dataCompetenza)
+    {
+        EnsureEditable();
+        if (dataCompetenza.Year != EsercizioAnno)
+        {
+            throw new ArgumentException(
+                $"La data di competenza {dataCompetenza:yyyy-MM-dd} non appartiene all'esercizio {EsercizioAnno}.",
+                nameof(dataCompetenza));
+        }
+
+        DataCompetenza = dataCompetenza;
+    }
+
+    /// <summary>
+    /// Registers a partial (or full) payment against the invoice. Allowed on Draft and Confirmed
+    /// states but forbidden on Reconciled (the reconciliation module owns the cashflow link at
+    /// that point). Over-payments past <see cref="Residuo"/> are rejected — use multiple smaller
+    /// payments or adjust an existing one.
+    /// </summary>
+    /// <param name="pagamento">Payment to register.</param>
+    public void AddPagamento(PagamentoMovimento pagamento)
+    {
+        ArgumentNullException.ThrowIfNull(pagamento);
+
+        if (Stato == StatoMovimento.Reconciled)
+        {
+            throw new InvalidOperationException(
+                "Movimento riconciliato: i pagamenti sono gestiti dalla riconciliazione (modulo 10).");
+        }
+
+        if (TotaleLordo <= 0m)
+        {
+            throw new InvalidOperationException(
+                "Impossibile registrare un pagamento su un movimento con totale nullo.");
+        }
+
+        if (pagamento.Importo - Residuo > PagamentoTolerance)
+        {
+            throw new InvalidOperationException(
+                $"Importo {pagamento.Importo:N2} supera il residuo {Residuo:N2}.");
+        }
+
+        pagamento.MovimentoId = Id;
+        pagamenti.Add(pagamento);
+    }
+
+    /// <summary>Removes a payment from the invoice (Draft or Confirmed state).</summary>
+    /// <param name="pagamentoId">Payment id to remove.</param>
+    /// <returns>The removed payment, or null if not found.</returns>
+    public PagamentoMovimento? RemovePagamento(Guid pagamentoId)
+    {
+        if (Stato == StatoMovimento.Reconciled)
+        {
+            throw new InvalidOperationException(
+                "Movimento riconciliato: i pagamenti sono gestiti dalla riconciliazione (modulo 10).");
+        }
+
+        var match = pagamenti.FirstOrDefault(p => p.Id == pagamentoId);
+        if (match is not null)
+        {
+            pagamenti.Remove(match);
+        }
+
+        return match;
     }
 
     /// <summary>Replaces the full set of lines atomically (typical edit pattern from UI).</summary>
