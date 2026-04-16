@@ -1,58 +1,82 @@
-@* Sidebar navigation with role-aware items. *@
+@* Sidebar navigation with role-aware items, light surface, compact spacing. *@
 
-<MudNavMenu Color="Color.Primary" Rounded="true" Margin="Margin.Dense">
-    <AuthorizeView Policy="@AuthorizationPolicies.RequireAuthenticated">
-        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
-            Dashboard
-        </MudNavLink>
-    </AuthorizeView>
-
-    <AuthorizeView Policy="@AuthorizationPolicies.RequireContabile">
-        <MudNavGroup Title="Prima Nota" Icon="@Icons.Material.Filled.Receipt" Expanded="true">
-            <MudNavLink Href="/movimenti" Icon="@Icons.Material.Filled.List">Movimenti</MudNavLink>
-            <MudNavLink Href="/riconciliazione" Icon="@Icons.Material.Filled.CompareArrows">Riconciliazione</MudNavLink>
-            <MudNavLink Href="/import" Icon="@Icons.Material.Filled.Upload">Import estratti conto</MudNavLink>
-        </MudNavGroup>
-
-        <MudNavGroup Title="Anagrafiche" Icon="@Icons.Material.Filled.PersonSearch">
-            <MudNavLink Href="/anagrafiche">Tutte</MudNavLink>
-            <MudNavLink Href="/anagrafiche/clienti">Clienti</MudNavLink>
-            <MudNavLink Href="/anagrafiche/fornitori">Fornitori</MudNavLink>
-            <MudNavLink Href="/anagrafiche/dipendenti">Dipendenti</MudNavLink>
-        </MudNavGroup>
-
-        <MudNavGroup Title="Configurazione" Icon="@Icons.Material.Filled.Settings">
-            <MudNavLink Href="/piano-conti">Piano dei conti</MudNavLink>
-            <MudNavLink Href="/causali">Causali</MudNavLink>
-            <MudNavLink Href="/conti-finanziari">Conti finanziari</MudNavLink>
-            <MudNavLink Href="/aliquote-iva">Aliquote IVA</MudNavLink>
-        </MudNavGroup>
-
-        <MudNavGroup Title="IVA" Icon="@Icons.Material.Filled.RequestQuote">
-            <MudNavLink Href="/iva/registri">Registri IVA</MudNavLink>
-            <MudNavLink Href="/iva/liquidazione">Liquidazione periodica</MudNavLink>
-        </MudNavGroup>
-
-        <MudNavGroup Title="Report" Icon="@Icons.Material.Filled.Assessment">
-            <MudNavLink Href="/report/export-commercialista">Export commercialista</MudNavLink>
-            <MudNavLink Href="/report/dashboard">Dashboard</MudNavLink>
-        </MudNavGroup>
-    </AuthorizeView>
-
-    <AuthorizeView Policy="@AuthorizationPolicies.RequireAuthenticated">
-        <MudNavLink Href="/note-spese" Icon="@Icons.Material.Filled.ReceiptLong">Note spese</MudNavLink>
-    </AuthorizeView>
-
-    <AuthorizeView Policy="@AuthorizationPolicies.RequireAdmin">
-        <MudDivider Class="my-2" />
-        <MudNavGroup Title="Amministrazione" Icon="@Icons.Material.Filled.AdminPanelSettings">
-            <MudNavLink Href="/admin/utenti">Utenti</MudNavLink>
-            <MudNavLink Href="/admin/esercizi">Esercizi contabili</MudNavLink>
-            <MudNavLink Href="/admin/regole-riconciliazione">Regole riconciliazione</MudNavLink>
-            <MudNavLink Href="/admin/audit-log">Audit log</MudNavLink>
-            <MudNavLink Href="/hangfire" Target="_blank" Icon="@Icons.Material.Filled.WorkHistory">
-                Job dashboard
+<div class="pn-nav">
+    <MudNavMenu Rounded="true" Margin="Margin.Dense" Color="Color.Primary" Bordered="false">
+        <AuthorizeView Policy="@AuthorizationPolicies.RequireAuthenticated">
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+                Dashboard
             </MudNavLink>
-        </MudNavGroup>
-    </AuthorizeView>
-</MudNavMenu>
+        </AuthorizeView>
+
+        <AuthorizeView Policy="@AuthorizationPolicies.RequireContabile">
+            <MudNavGroup Title="Prima Nota" Icon="@Icons.Material.Filled.ReceiptLong" Expanded="true">
+                <MudNavLink Href="/movimenti">Movimenti</MudNavLink>
+                <MudNavLink Href="/riconciliazione">Riconciliazione</MudNavLink>
+                <MudNavLink Href="/import">Import estratti conto</MudNavLink>
+            </MudNavGroup>
+
+            <MudNavGroup Title="Anagrafiche" Icon="@Icons.Material.Filled.Group">
+                <MudNavLink Href="/anagrafiche">Tutte</MudNavLink>
+                <MudNavLink Href="/anagrafiche/clienti">Clienti</MudNavLink>
+                <MudNavLink Href="/anagrafiche/fornitori">Fornitori</MudNavLink>
+                <MudNavLink Href="/anagrafiche/dipendenti">Dipendenti</MudNavLink>
+            </MudNavGroup>
+
+            <MudNavGroup Title="Configurazione" Icon="@Icons.Material.Filled.Settings">
+                <MudNavLink Href="/piano-conti">Piano dei conti</MudNavLink>
+                <MudNavLink Href="/causali">Causali</MudNavLink>
+                <MudNavLink Href="/conti-finanziari">Conti finanziari</MudNavLink>
+                <MudNavLink Href="/aliquote-iva">Aliquote IVA</MudNavLink>
+            </MudNavGroup>
+
+            <MudNavGroup Title="IVA" Icon="@Icons.Material.Filled.Percent">
+                <MudNavLink Href="/iva/registri">Registri IVA</MudNavLink>
+                <MudNavLink Href="/iva/liquidazione">Liquidazione periodica</MudNavLink>
+            </MudNavGroup>
+
+            <MudNavGroup Title="Report" Icon="@Icons.Material.Filled.BarChart">
+                <MudNavLink Href="/report/export-commercialista">Export commercialista</MudNavLink>
+                <MudNavLink Href="/report/dashboard">Dashboard analitica</MudNavLink>
+            </MudNavGroup>
+        </AuthorizeView>
+
+        <AuthorizeView Policy="@AuthorizationPolicies.RequireAuthenticated">
+            <MudNavLink Href="/note-spese" Icon="@Icons.Material.Filled.ReceiptLong">Note spese</MudNavLink>
+        </AuthorizeView>
+
+        <AuthorizeView Policy="@AuthorizationPolicies.RequireAdmin">
+            <MudDivider Class="my-3" />
+            <MudNavGroup Title="Amministrazione" Icon="@Icons.Material.Filled.Tune">
+                <MudNavLink Href="/admin/utenti">Utenti</MudNavLink>
+                <MudNavLink Href="/admin/esercizi">Esercizi contabili</MudNavLink>
+                <MudNavLink Href="/admin/regole-riconciliazione">Regole riconciliazione</MudNavLink>
+                <MudNavLink Href="/admin/audit-log">Audit log</MudNavLink>
+                <MudNavLink Href="/hangfire" Target="_blank" Icon="@Icons.Material.Filled.WorkHistory">
+                    Job dashboard
+                </MudNavLink>
+            </MudNavGroup>
+        </AuthorizeView>
+    </MudNavMenu>
+</div>
+
+<style>
+    .pn-nav {
+        padding: 1rem .75rem;
+    }
+    .pn-nav .mud-nav-link {
+        font-weight: 500;
+        color: #374151 !important;
+        margin: 2px 0;
+    }
+    .pn-nav .mud-nav-link:hover {
+        background: #e5e7eb !important;
+    }
+    .pn-nav .mud-nav-link.active {
+        background: rgba(0,0,0,0.08) !important;
+        color: #111827 !important;
+    }
+    .pn-nav .mud-nav-link-icon {
+        color: #6b7280 !important;
+    }
+    .pn-nav .mud-nav-group-title { font-weight: 500; }
+</style>

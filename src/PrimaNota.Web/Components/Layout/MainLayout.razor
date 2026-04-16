@@ -1,60 +1,86 @@
 @inherits LayoutComponentBase
+@using System.Security.Claims
 
-<MudThemeProvider IsDarkMode="false" />
+<MudThemeProvider Theme="@PrimaNotaTheme.Theme" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <AuthorizeView>
     <Authorized>
         <MudLayout>
-            <MudAppBar Elevation="1" Color="Color.Primary">
-                <MudIconButton Icon="@Icons.Material.Filled.Menu"
-                               Color="Color.Inherit"
-                               Edge="Edge.Start"
-                               OnClick="ToggleDrawer" />
-                <MudText Typo="Typo.h6" Class="ml-2">Prima Nota</MudText>
+            <MudAppBar Elevation="0" Fixed="true" Color="Color.Primary" Dense="false" Class="pn-appbar">
+                <div class="pn-brand">
+                    <div class="pn-logo">P</div>
+                    <span class="pn-brand-name">Prima Nota</span>
+                </div>
 
                 <MudSpacer />
 
-                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled">
-                    Esercizio @CurrentYear
-                </MudChip>
+                <div class="pn-search">
+                    <MudTextField T="string"
+                                  @bind-Value="searchText"
+                                  Placeholder="Cerca..."
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  AdornmentColor="Color.Default"
+                                  Class="pn-search-input" />
+                </div>
 
-                <MudMenu Icon="@Icons.Material.Filled.AccountCircle"
-                         Color="Color.Inherit"
-                         AnchorOrigin="Origin.BottomRight"
-                         TransformOrigin="Origin.TopRight">
-                    <div class="px-4 py-2">
-                        <MudText Typo="Typo.subtitle2">@context.User.Identity?.Name</MudText>
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                            @string.Join(", ", context.User.Claims
-                                .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role)
-                                .Select(c => c.Value))
-                        </MudText>
-                    </div>
-                    <MudDivider />
-                    <form method="post" action="/Account/Logout">
-                        <button type="submit" class="mud-menu-logout-button">
-                            <MudIcon Icon="@Icons.Material.Filled.Logout" Size="Size.Small" Class="mr-2" />
-                            Esci
-                        </button>
-                    </form>
+                <MudSpacer />
+
+                <MudIconButton Icon="@Icons.Material.Outlined.NotificationsNone"
+                               Color="Color.Inherit"
+                               Size="Size.Medium" />
+
+                <MudMenu AnchorOrigin="Origin.BottomRight"
+                         TransformOrigin="Origin.TopRight"
+                         Class="ml-2">
+                    <ActivatorContent>
+                        <div class="pn-profile">
+                            <MudAvatar Size="Size.Small" Color="Color.Default" Class="pn-avatar">
+                                @Initials(context.User)
+                            </MudAvatar>
+                            <span class="pn-profile-name">@(context.User.Identity?.Name ?? "Utente")</span>
+                            <MudIcon Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" />
+                        </div>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <div class="px-4 py-2">
+                            <MudText Typo="Typo.subtitle2">@(context.User.Identity?.Name)</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @string.Join(", ", context.User.Claims
+                                    .Where(c => c.Type == ClaimTypes.Role)
+                                    .Select(c => c.Value))
+                            </MudText>
+                        </div>
+                        <MudDivider />
+                        <form method="post" action="/Account/Logout">
+                            <button type="submit" class="pn-logout-btn">
+                                <MudIcon Icon="@Icons.Material.Filled.Logout" Size="Size.Small" Class="mr-2" />
+                                Esci
+                            </button>
+                        </form>
+                    </ChildContent>
                 </MudMenu>
             </MudAppBar>
 
             <MudDrawer @bind-Open="drawerOpen"
-                       Elevation="2"
+                       Elevation="0"
+                       Fixed="true"
                        Variant="DrawerVariant.Responsive"
                        Breakpoint="Breakpoint.Md"
-                       ClipMode="DrawerClipMode.Always">
-                <MudDrawerHeader Class="pa-4">
-                    <MudText Typo="Typo.h6">Menu</MudText>
-                </MudDrawerHeader>
+                       ClipMode="DrawerClipMode.Always"
+                       Class="pn-drawer">
                 <NavMenu />
             </MudDrawer>
 
-            <MudMainContent Class="pt-16 pa-4">
-                <MudContainer MaxWidth="MaxWidth.False" Class="mt-4">
+            <MudMainContent Class="pn-main">
+                <MudContainer MaxWidth="MaxWidth.False" Class="pn-container pa-8">
+                    <div class="pn-year-chip">
+                        Esercizio @CurrentYear
+                    </div>
                     @Body
                 </MudContainer>
             </MudMainContent>
@@ -72,25 +98,117 @@
 </div>
 
 <style>
-    .mud-menu-logout-button {
-        width: 100%;
-        text-align: left;
-        background: none;
-        border: 0;
-        padding: .6rem 1rem;
-        cursor: pointer;
-        color: inherit;
-        font: inherit;
+    /* ============ AppBar ============ */
+    .pn-appbar {
+        box-shadow: none !important;
+        padding: 0 1.5rem;
+    }
+    .pn-brand {
         display: flex;
         align-items: center;
+        gap: .75rem;
+        min-width: 16rem;
     }
-    .mud-menu-logout-button:hover { background: var(--mud-palette-action-default-hover, #f5f5f5); }
+    .pn-logo {
+        width: 2rem;
+        height: 2rem;
+        background: #3b82f6;
+        border-radius: .5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-style: italic;
+        font-size: 1.25rem;
+        color: #fff;
+    }
+    .pn-brand-name {
+        font-size: 1.25rem;
+        font-weight: 600;
+        letter-spacing: .02em;
+    }
+    .pn-search {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        max-width: 42rem;
+        padding: 0 1rem;
+    }
+    .pn-search-input {
+        width: 100%;
+    }
+    .pn-search-input .mud-input-outlined-border { border-color: transparent !important; }
+    .pn-search-input .mud-input-slot {
+        background: #ffffff !important;
+        border-radius: 8px !important;
+    }
+    .pn-search-input input { color: #111827 !important; }
+    .pn-search-input .mud-input-adornment .mud-icon-default { color: #9ca3af !important; }
+
+    .pn-profile {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        cursor: pointer;
+        padding: .25rem .5rem;
+        border-radius: 6px;
+        transition: background .15s ease;
+    }
+    .pn-profile:hover { background: rgba(255,255,255,0.1); }
+    .pn-profile-name { font-size: .875rem; font-weight: 500; }
+    .pn-avatar {
+        background: #ffffff !important;
+        color: #1a1b41 !important;
+        font-weight: 600;
+    }
+
+    .pn-logout-btn {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        padding: .6rem 1rem;
+        background: transparent;
+        border: 0;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+        text-align: left;
+    }
+    .pn-logout-btn:hover { background: #f3f4f6; }
+
+    /* ============ Drawer ============ */
+    .pn-drawer {
+        border-right: 1px solid #e5e7eb !important;
+    }
+
+    /* ============ Main content ============ */
+    .pn-main {
+        background: #f9fafb;
+    }
+    .pn-container {
+        position: relative;
+    }
+    .pn-year-chip {
+        position: absolute;
+        right: 2rem;
+        top: 2rem;
+        font-size: .875rem;
+        color: #6b7280;
+    }
 </style>
 
 @code {
     private bool drawerOpen = true;
+    private string? searchText;
 
     private int CurrentYear => DateTime.UtcNow.Year;
 
-    private void ToggleDrawer() => drawerOpen = !drawerOpen;
+    private static string Initials(ClaimsPrincipal user)
+    {
+        var name = user.Identity?.Name ?? "";
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Split(new[] { ' ', '.', '@' }, StringSplitOptions.RemoveEmptyEntries);
+        var letters = string.Concat(parts.Take(2).Select(p => char.ToUpperInvariant(p[0])));
+        return string.IsNullOrEmpty(letters) ? name[..1].ToUpperInvariant() : letters;
+    }
 }
