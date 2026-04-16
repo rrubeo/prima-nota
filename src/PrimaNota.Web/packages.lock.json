@@ -44,9 +44,9 @@
       },
       "MudBlazor": {
         "type": "Direct",
-        "requested": "[8.10.0, )",
-        "resolved": "8.10.0",
-        "contentHash": "kEBD4Oq/+5ZfE1uuk280Wkocy1BHKyLDoIA7s190F9u37Gb0L3QItAItAXBa01BEJLPy2estV6pmfe+/UnLGUA=="
+        "requested": "[9.3.0, )",
+        "resolved": "9.3.0",
+        "contentHash": "7EMI5HRvi7SNh1e80RWoS4yXb71BmJbqyx/ccP5T21q3ceLx5AP+SSIfTzqI5Iv6CbcJQQYLp1uwWtvohIeZrA=="
       },
       "Serilog.AspNetCore": {
         "type": "Direct",
