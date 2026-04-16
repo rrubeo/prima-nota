@@ -1,0 +1,112 @@
+@page "/causali"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using MediatR
+@using PrimaNota.Application.PianoConti
+@using PrimaNota.Domain.PianoConti
+@inject IMediator Mediator
+@inject IDialogService Dialog
+@inject ISnackbar Snackbar
+
+<PageTitle>Causali · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Causali</MudText>
+
+<MudStack Row="true" Class="mb-4">
+    <MudCheckBox T="bool" @bind-Value="includiNonAttive" @bind-Value:after="ReloadAsync" Label="Includi non attive" />
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
+        Nuova causale
+    </MudButton>
+</MudStack>
+
+<MudTable Items="items" Hover="true" Dense="true" Loading="loading" Striped="true">
+    <HeaderContent>
+        <MudTh>Codice</MudTh>
+        <MudTh>Nome</MudTh>
+        <MudTh>Tipo</MudTh>
+        <MudTh>Categoria di default</MudTh>
+        <MudTh>Stato</MudTh>
+        <MudTh Style="width: 150px;">Azioni</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd><strong>@context.Codice</strong></MudTd>
+        <MudTd>@context.Nome</MudTd>
+        <MudTd><MudChip T="string" Size="Size.Small">@context.Tipo</MudChip></MudTd>
+        <MudTd>@(context.CategoriaDefaultNome ?? "—")</MudTd>
+        <MudTd>
+            @if (context.Attiva)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">Attiva</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Non attiva</MudChip>
+            }
+        </MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditAsync(context))" />
+            <MudIconButton Icon="@(context.Attiva ? Icons.Material.Filled.Block : Icons.Material.Filled.CheckCircle)"
+                           Size="Size.Small"
+                           Color="@(context.Attiva ? Color.Warning : Color.Success)"
+                           OnClick="@(() => ToggleAsync(context))" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent><MudText>Nessuna causale.</MudText></NoRecordsContent>
+</MudTable>
+
+@code {
+    private bool includiNonAttive;
+    private bool loading;
+    private IReadOnlyList<CausaleDto> items = Array.Empty<CausaleDto>();
+    private IReadOnlyList<CategoriaDto> categorie = Array.Empty<CategoriaDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        categorie = await Mediator.Send(new ListCategorie(false));
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        loading = true;
+        try
+        {
+            items = await Mediator.Send(new ListCausali(includiNonAttive));
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task NewAsync()
+    {
+        var p = new DialogParameters { ["Categorie"] = categorie };
+        var result = await Dialog.ShowAsync<CausaleDialog>("Nuova causale", p, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var outcome = await result.Result;
+        if (outcome is { Canceled: false })
+        {
+            Snackbar.Add("Causale creata.", Severity.Success);
+            await ReloadAsync();
+        }
+    }
+
+    private async Task EditAsync(CausaleDto dto)
+    {
+        var p = new DialogParameters { ["Categorie"] = categorie, ["Existing"] = dto };
+        var result = await Dialog.ShowAsync<CausaleDialog>("Modifica causale", p, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var outcome = await result.Result;
+        if (outcome is { Canceled: false })
+        {
+            Snackbar.Add("Causale aggiornata.", Severity.Success);
+            await ReloadAsync();
+        }
+    }
+
+    private async Task ToggleAsync(CausaleDto dto)
+    {
+        await Mediator.Send(new ToggleCausaleActivation(dto.Id, !dto.Attiva));
+        Snackbar.Add(dto.Attiva ? "Causale disattivata." : "Causale riattivata.", Severity.Info);
+        await ReloadAsync();
+    }
+}

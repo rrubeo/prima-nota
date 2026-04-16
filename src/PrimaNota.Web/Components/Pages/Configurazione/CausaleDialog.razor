@@ -1,0 +1,105 @@
+@using MediatR
+@using PrimaNota.Application.PianoConti
+@using PrimaNota.Domain.PianoConti
+@inject IMediator Mediator
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" Model="model" Validation="Validator" ValidationDelay="0">
+            <MudGrid>
+                <MudItem xs="12" sm="4"><MudTextField @bind-Value="model.Codice" Label="Codice" Required="true" For="@(() => model.Codice)" /></MudItem>
+                <MudItem xs="12" sm="8"><MudTextField @bind-Value="model.Nome" Label="Nome" Required="true" For="@(() => model.Nome)" /></MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="TipoMovimento" @bind-Value="model.Tipo" Label="Tipo">
+                        @foreach (var v in Enum.GetValues<TipoMovimento>())
+                        {
+                            <MudSelectItem Value="v">@v</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="Guid?" @bind-Value="model.CategoriaDefaultId" Label="Categoria di default" Clearable="true">
+                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">— nessuna —</MudSelectItem>
+                        @foreach (var c in Categorie)
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)c.Id)">@c.Codice — @c.Nome</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12"><MudTextField @bind-Value="model.Note" Label="Note" Lines="2" /></MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="saving">Salva</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public CausaleDto? Existing { get; set; }
+    [Parameter] public IReadOnlyList<CategoriaDto> Categorie { get; set; } = Array.Empty<CategoriaDto>();
+
+    private CausaleInput model = new();
+    private MudForm? form;
+    private bool saving;
+    private readonly CausaleInputValidator validator = new();
+
+    private Func<object, string, Task<IEnumerable<string>>> Validator => async (_, prop) =>
+    {
+        var r = await validator.ValidateAsync(model);
+        return r.Errors.Where(e => e.PropertyName == prop).Select(e => e.ErrorMessage);
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (Existing is not null)
+        {
+            model = new CausaleInput
+            {
+                Codice = Existing.Codice,
+                Nome = Existing.Nome,
+                Tipo = Existing.Tipo,
+                CategoriaDefaultId = Existing.CategoriaDefaultId,
+                Note = Existing.Note,
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        if (form is null) return;
+        await form.Validate();
+        if (!form.IsValid)
+        {
+            Snackbar.Add("Correggi gli errori.", Severity.Warning);
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            if (Existing is null)
+            {
+                await Mediator.Send(new CreateCausale(model));
+            }
+            else
+            {
+                await Mediator.Send(new UpdateCausale(Existing.Id, model));
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

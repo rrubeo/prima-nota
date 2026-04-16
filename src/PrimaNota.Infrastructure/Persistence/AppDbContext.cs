@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using PrimaNota.Application.Abstractions;
 using PrimaNota.Domain.Anagrafiche;
+using PrimaNota.Domain.Iva;
+using PrimaNota.Domain.PianoConti;
 using PrimaNota.Infrastructure.Identity;
 
 namespace PrimaNota.Infrastructure.Persistence;
@@ -23,6 +25,15 @@ public sealed class AppDbContext
 
     /// <summary>Gets the <see cref="Anagrafica"/> set.</summary>
     public DbSet<Anagrafica> Anagrafiche => Set<Anagrafica>();
+
+    /// <summary>Gets the <see cref="Categoria"/> set.</summary>
+    public DbSet<Categoria> Categorie => Set<Categoria>();
+
+    /// <summary>Gets the <see cref="Causale"/> set.</summary>
+    public DbSet<Causale> Causali => Set<Causale>();
+
+    /// <summary>Gets the <see cref="AliquotaIva"/> set.</summary>
+    public DbSet<AliquotaIva> AliquoteIva => Set<AliquotaIva>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)

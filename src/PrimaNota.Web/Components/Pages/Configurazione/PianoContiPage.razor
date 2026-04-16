@@ -1,0 +1,108 @@
+@page "/piano-conti"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using MediatR
+@using PrimaNota.Application.PianoConti
+@using PrimaNota.Domain.PianoConti
+@inject IMediator Mediator
+@inject IDialogService Dialog
+@inject ISnackbar Snackbar
+
+<PageTitle>Piano dei conti · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Piano dei conti</MudText>
+
+<MudStack Row="true" Class="mb-4">
+    <MudCheckBox T="bool" @bind-Value="includiNonAttive" @bind-Value:after="ReloadAsync" Label="Includi non attive" />
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewAsync">
+        Nuova categoria
+    </MudButton>
+</MudStack>
+
+<MudTable Items="items" Hover="true" Dense="true" Loading="loading" Striped="true">
+    <HeaderContent>
+        <MudTh>Codice</MudTh>
+        <MudTh>Nome</MudTh>
+        <MudTh>Natura</MudTh>
+        <MudTh>Stato</MudTh>
+        <MudTh Style="width: 150px;">Azioni</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd><strong>@context.Codice</strong></MudTd>
+        <MudTd>@context.Nome</MudTd>
+        <MudTd>
+            <MudChip T="string" Size="Size.Small" Color="@(context.Natura == NaturaCategoria.Entrata ? Color.Success : Color.Warning)">
+                @context.Natura
+            </MudChip>
+        </MudTd>
+        <MudTd>
+            @if (context.Attiva)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">Attiva</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Non attiva</MudChip>
+            }
+        </MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditAsync(context))" />
+            <MudIconButton Icon="@(context.Attiva ? Icons.Material.Filled.Block : Icons.Material.Filled.CheckCircle)"
+                           Size="Size.Small"
+                           Color="@(context.Attiva ? Color.Warning : Color.Success)"
+                           OnClick="@(() => ToggleAsync(context))" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent><MudText>Nessuna categoria.</MudText></NoRecordsContent>
+</MudTable>
+
+@code {
+    private bool includiNonAttive;
+    private bool loading;
+    private IReadOnlyList<CategoriaDto> items = Array.Empty<CategoriaDto>();
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        loading = true;
+        try
+        {
+            items = await Mediator.Send(new ListCategorie(includiNonAttive));
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task NewAsync()
+    {
+        var result = await Dialog.ShowAsync<CategoriaDialog>("Nuova categoria", new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var outcome = await result.Result;
+        if (outcome is { Canceled: false })
+        {
+            Snackbar.Add("Categoria creata.", Severity.Success);
+            await ReloadAsync();
+        }
+    }
+
+    private async Task EditAsync(CategoriaDto dto)
+    {
+        var parameters = new DialogParameters { ["Existing"] = dto };
+        var result = await Dialog.ShowAsync<CategoriaDialog>("Modifica categoria", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var outcome = await result.Result;
+        if (outcome is { Canceled: false })
+        {
+            Snackbar.Add("Categoria aggiornata.", Severity.Success);
+            await ReloadAsync();
+        }
+    }
+
+    private async Task ToggleAsync(CategoriaDto dto)
+    {
+        await Mediator.Send(new ToggleCategoriaActivation(dto.Id, !dto.Attiva));
+        Snackbar.Add(dto.Attiva ? "Categoria disattivata." : "Categoria riattivata.", Severity.Info);
+        await ReloadAsync();
+    }
+}

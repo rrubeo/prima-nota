@@ -1,0 +1,99 @@
+@using MediatR
+@using PrimaNota.Application.PianoConti
+@using PrimaNota.Domain.PianoConti
+@inject IMediator Mediator
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" Model="model" Validation="Validator" ValidationDelay="0">
+            <MudGrid>
+                <MudItem xs="12" sm="4">
+                    <MudTextField @bind-Value="model.Codice" Label="Codice" Required="true" For="@(() => model.Codice)" />
+                </MudItem>
+                <MudItem xs="12" sm="8">
+                    <MudTextField @bind-Value="model.Nome" Label="Nome" Required="true" For="@(() => model.Nome)" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="NaturaCategoria" @bind-Value="model.Natura" Label="Natura">
+                        <MudSelectItem Value="NaturaCategoria.Entrata">Entrata</MudSelectItem>
+                        <MudSelectItem Value="NaturaCategoria.Uscita">Uscita</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="model.Note" Label="Note" Lines="2" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="saving">Salva</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public CategoriaDto? Existing { get; set; }
+
+    private CategoriaInput model = new();
+    private MudForm? form;
+    private bool saving;
+
+    private readonly CategoriaInputValidator validator = new();
+
+    private Func<object, string, Task<IEnumerable<string>>> Validator => async (_, prop) =>
+    {
+        var r = await validator.ValidateAsync(model);
+        return r.Errors.Where(e => e.PropertyName == prop).Select(e => e.ErrorMessage);
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (Existing is not null)
+        {
+            model = new CategoriaInput
+            {
+                Codice = Existing.Codice,
+                Nome = Existing.Nome,
+                Natura = Existing.Natura,
+                Note = Existing.Note,
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        if (form is null) return;
+        await form.Validate();
+        if (!form.IsValid)
+        {
+            Snackbar.Add("Correggi gli errori.", Severity.Warning);
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            if (Existing is null)
+            {
+                await Mediator.Send(new CreateCategoria(model));
+            }
+            else
+            {
+                await Mediator.Send(new UpdateCategoria(Existing.Id, model));
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

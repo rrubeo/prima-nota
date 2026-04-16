@@ -1,0 +1,104 @@
+@using MediatR
+@using PrimaNota.Application.Iva
+@using PrimaNota.Domain.Iva
+@inject IMediator Mediator
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" Model="model" Validation="Validator" ValidationDelay="0">
+            <MudGrid>
+                <MudItem xs="12" sm="4"><MudTextField @bind-Value="model.Codice" Label="Codice" Required="true" For="@(() => model.Codice)" /></MudItem>
+                <MudItem xs="12" sm="8"><MudTextField @bind-Value="model.Descrizione" Label="Descrizione" Required="true" For="@(() => model.Descrizione)" /></MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="TipoIva" @bind-Value="model.Tipo" Label="Tipo">
+                        @foreach (var v in Enum.GetValues<TipoIva>())
+                        {
+                            <MudSelectItem Value="v">@v</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="6" sm="4">
+                    <MudNumericField @bind-Value="model.Percentuale" Label="Percentuale %" Min="0m" Max="100m" />
+                </MudItem>
+                <MudItem xs="6" sm="4">
+                    <MudNumericField @bind-Value="model.PercentualeIndetraibile" Label="% indetraibile" Min="0m" Max="100m" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="model.CodiceNatura" Label="Codice natura (es. N2.2, N4, N6)" HelperText="Solo per aliquote non ordinarie" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="saving">Salva</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public AliquotaIvaDto? Existing { get; set; }
+
+    private AliquotaIvaInput model = new();
+    private MudForm? form;
+    private bool saving;
+    private readonly AliquotaIvaInputValidator validator = new();
+
+    private Func<object, string, Task<IEnumerable<string>>> Validator => async (_, prop) =>
+    {
+        var r = await validator.ValidateAsync(model);
+        return r.Errors.Where(e => e.PropertyName == prop).Select(e => e.ErrorMessage);
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (Existing is not null)
+        {
+            model = new AliquotaIvaInput
+            {
+                Codice = Existing.Codice,
+                Descrizione = Existing.Descrizione,
+                Percentuale = Existing.Percentuale,
+                PercentualeIndetraibile = Existing.PercentualeIndetraibile,
+                Tipo = Existing.Tipo,
+                CodiceNatura = Existing.CodiceNatura,
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        if (form is null) return;
+        await form.Validate();
+        if (!form.IsValid)
+        {
+            Snackbar.Add("Correggi gli errori.", Severity.Warning);
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            if (Existing is null)
+            {
+                await Mediator.Send(new CreateAliquotaIva(model));
+            }
+            else
+            {
+                await Mediator.Send(new UpdateAliquotaIva(Existing.Id, model));
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

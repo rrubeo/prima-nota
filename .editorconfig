@@ -64,6 +64,10 @@ dotnet_diagnostic.CA1848.severity = none
 # CA1873: avoid expensive argument eval when log level disabled — same rationale as CA1848
 dotnet_diagnostic.CA1873.severity = none
 
+# SA1204 (static members should come before non-static): opinionated ordering conflicting
+# with logical reading order of helper methods placed near their callers.
+dotnet_diagnostic.SA1204.severity = none
+
 [**/Migrations/*.cs]
 generated_code = true
 dotnet_analyzer_diagnostic.severity = none

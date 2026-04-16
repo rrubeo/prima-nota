@@ -82,6 +82,7 @@ public static class DependencyInjection
             .AddDefaultTokenProviders();
 
         services.AddScoped<IdentitySeeder>();
+        services.AddScoped<MasterDataSeeder>();
         services.AddScoped<IEsercizioContext, EsercizioContext>();
         services.AddScoped<EsercizioRegistrationService>();
         services.AddScoped<EsercizioYearlyJob>();
@@ -135,5 +136,8 @@ public static class DependencyInjection
 
         var esercizi = provider.GetRequiredService<EsercizioRegistrationService>();
         await esercizi.EnsureCurrentYearAsync(cancellationToken);
+
+        var masterData = provider.GetRequiredService<MasterDataSeeder>();
+        await masterData.SeedAsync(cancellationToken);
     }
 }
