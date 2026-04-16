@@ -1,5 +1,22 @@
-﻿@page "/not-found"
-@layout MainLayout
+@page "/not-found"
+@attribute [AllowAnonymous]
 
-<h3>Not Found</h3>
-<p>Sorry, the content you are looking for does not exist.</p>
+<PageTitle>Pagina non trovata · Prima Nota</PageTitle>
+
+<div class="pn-404">
+    <MudText Typo="Typo.h2" Class="pn-404-code">404</MudText>
+    <MudText Typo="Typo.h5" GutterBottom="true">Pagina non trovata</MudText>
+    <MudText Typo="Typo.body1" Class="mud-text-secondary mb-6">
+        La pagina che stai cercando non esiste o non è ancora stata implementata.
+        Molte voci del menu (Movimenti, Riconciliazione, Import, Report, ecc.) verranno
+        attivate nelle prossime fasi dello sviluppo.
+    </MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">
+        Torna alla dashboard
+    </MudButton>
+</div>
+
+<style>
+    .pn-404 { text-align: center; padding: 4rem 1rem; }
+    .pn-404-code { font-size: 6rem !important; font-weight: 700 !important; color: #1a1b41; line-height: 1; }
+</style>
