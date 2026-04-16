@@ -34,40 +34,33 @@
                                Color="Color.Inherit"
                                Size="Size.Medium" />
 
-                <MudMenu AnchorOrigin="Origin.BottomRight"
+                <MudMenu Label="@(context.User.Identity?.Name ?? "Utente")"
+                         StartIcon="@Icons.Material.Filled.AccountCircle"
+                         EndIcon="@Icons.Material.Filled.KeyboardArrowDown"
+                         Variant="Variant.Text"
+                         Color="Color.Inherit"
+                         AnchorOrigin="Origin.BottomRight"
                          TransformOrigin="Origin.TopRight"
-                         Class="ml-2"
+                         Class="pn-profile-menu ml-2"
                          Dense="true">
-                    <ActivatorContent>
-                        <MudButton Variant="Variant.Text"
-                                   Color="Color.Inherit"
-                                   DropShadow="false"
-                                   Class="pn-profile-btn">
-                            <MudAvatar Size="Size.Small" Class="pn-avatar">@Initials(context.User)</MudAvatar>
-                            <span class="pn-profile-name ml-2">@(context.User.Identity?.Name ?? "Utente")</span>
-                            <MudIcon Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Class="ml-1" />
-                        </MudButton>
-                    </ActivatorContent>
-                    <ChildContent>
-                        <div class="px-4 py-2">
-                            <MudText Typo="Typo.subtitle2">@(context.User.Identity?.Name)</MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                @string.Join(", ", context.User.Claims
-                                    .Where(c => c.Type == ClaimTypes.Role)
-                                    .Select(c => c.Value))
-                            </MudText>
-                        </div>
-                        <MudDivider />
-                        <MudMenuItem Href="/account/cambia-password"
-                                     Icon="@Icons.Material.Filled.Key">
-                            Cambia password
-                        </MudMenuItem>
-                        <MudMenuItem Href="/account/signout"
-                                     ForceLoad="true"
-                                     Icon="@Icons.Material.Filled.Logout">
-                            Esci
-                        </MudMenuItem>
-                    </ChildContent>
+                    <div class="px-4 py-2">
+                        <MudText Typo="Typo.subtitle2">@(context.User.Identity?.Name)</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @string.Join(", ", context.User.Claims
+                                .Where(c => c.Type == ClaimTypes.Role)
+                                .Select(c => c.Value))
+                        </MudText>
+                    </div>
+                    <MudDivider />
+                    <MudMenuItem Href="/account/cambia-password"
+                                 Icon="@Icons.Material.Filled.Key">
+                        Cambia password
+                    </MudMenuItem>
+                    <MudMenuItem Href="/account/signout"
+                                 ForceLoad="true"
+                                 Icon="@Icons.Material.Filled.Logout">
+                        Esci
+                    </MudMenuItem>
                 </MudMenu>
             </MudAppBar>
 
@@ -150,17 +143,15 @@
     .pn-search-input input { color: #111827 !important; }
     .pn-search-input .mud-input-adornment .mud-icon-default { color: #9ca3af !important; }
 
-    .pn-profile-btn {
+    .pn-profile-menu .mud-button-root {
         text-transform: none !important;
-        padding: .25rem .75rem !important;
+        color: #fff !important;
+        font-weight: 500 !important;
+        padding: .4rem .75rem !important;
         border-radius: 8px !important;
     }
-    .pn-profile-btn:hover { background: rgba(255,255,255,0.1) !important; }
-    .pn-profile-name { font-size: .875rem; font-weight: 500; color: #fff; }
-    .pn-avatar {
-        background: #ffffff !important;
-        color: #1a1b41 !important;
-        font-weight: 600;
+    .pn-profile-menu .mud-button-root:hover {
+        background: rgba(255,255,255,0.1) !important;
     }
 
     /* ============ Drawer ============ */
