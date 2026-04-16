@@ -1,0 +1,129 @@
+@using MediatR
+@using PrimaNota.Application.Anagrafiche
+@using PrimaNota.Application.Anagrafiche.Upsert
+@inject IMediator Mediator
+@inject IDialogService Dialog
+@inject ISnackbar Snackbar
+
+@* Reusable Anagrafica selector with optional role filter and inline "Nuova" button.
+   The caller passes a suggested role (Cliente/Fornitore/Dipendente) inferred from the
+   category on the line; the dropdown hides anagrafiche that do not have that flag. *@
+
+<div class="d-flex align-center" style="gap: .25rem;">
+    <MudSelect T="Guid?"
+               Value="Value"
+               ValueChanged="OnValueChanged"
+               Label="@Label"
+               Dense="true"
+               Clearable="@Clearable"
+               Disabled="@Disabled"
+               ToStringFunc="@FormatAnagrafica"
+               Class="flex-grow-1">
+        @if (Clearable)
+        {
+            <MudSelectItem T="Guid?" Value="@((Guid?)null)">—</MudSelectItem>
+        }
+        @foreach (var a in FilteredAnagrafiche())
+        {
+            <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.RagioneSociale</MudSelectItem>
+        }
+    </MudSelect>
+
+    @if (!Disabled)
+    {
+        <MudTooltip Text="Crea nuova anagrafica">
+            <MudIconButton Icon="@Icons.Material.Filled.PersonAdd"
+                           Size="Size.Small"
+                           Color="Color.Primary"
+                           OnClick="OpenNewAnagraficaAsync" />
+        </MudTooltip>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid? Value { get; set; }
+
+    [Parameter] public EventCallback<Guid?> ValueChanged { get; set; }
+
+    [Parameter] public string Label { get; set; } = "Anagrafica";
+
+    [Parameter] public bool Clearable { get; set; } = true;
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Role that should be suggested. <c>null</c> = no filter.</summary>
+    [Parameter] public AnagraficaRuoloFilter SuggestedRuolo { get; set; } = AnagraficaRuoloFilter.Tutti;
+
+    [Parameter] public IReadOnlyList<AnagraficaListItemDto> Anagrafiche { get; set; } = Array.Empty<AnagraficaListItemDto>();
+
+    /// <summary>Raised when a new anagrafica has just been created, so the parent can refresh its list.</summary>
+    [Parameter] public EventCallback<Guid> OnNewAnagraficaCreated { get; set; }
+
+    private IEnumerable<AnagraficaListItemDto> FilteredAnagrafiche()
+    {
+        if (SuggestedRuolo == AnagraficaRuoloFilter.Tutti)
+        {
+            return Anagrafiche;
+        }
+
+        var compatible = Anagrafiche.Where(a => SuggestedRuolo switch
+        {
+            AnagraficaRuoloFilter.Clienti => a.IsCliente,
+            AnagraficaRuoloFilter.Fornitori => a.IsFornitore,
+            AnagraficaRuoloFilter.Dipendenti => a.IsDipendente,
+            _ => true,
+        });
+
+        // Ensure the currently selected anagrafica remains visible even if its roles changed.
+        if (Value.HasValue)
+        {
+            var current = Anagrafiche.FirstOrDefault(a => a.Id == Value.Value);
+            if (current is not null && !compatible.Any(a => a.Id == current.Id))
+            {
+                compatible = compatible.Append(current);
+            }
+        }
+
+        return compatible;
+    }
+
+    private string FormatAnagrafica(Guid? id)
+    {
+        if (!id.HasValue)
+        {
+            return string.Empty;
+        }
+
+        var match = Anagrafiche.FirstOrDefault(a => a.Id == id.Value);
+        return match?.RagioneSociale ?? string.Empty;
+    }
+
+    private Task OnValueChanged(Guid? value) => ValueChanged.InvokeAsync(value);
+
+    private async Task OpenNewAnagraficaAsync()
+    {
+        // Pre-set the role flags to match the suggested role so the dialog opens with the right ticks.
+        var seed = new AnagraficaInput
+        {
+            PersonaFisica = SuggestedRuolo == AnagraficaRuoloFilter.Dipendenti,
+            IsCliente = SuggestedRuolo == AnagraficaRuoloFilter.Clienti || SuggestedRuolo == AnagraficaRuoloFilter.Tutti,
+            IsFornitore = SuggestedRuolo == AnagraficaRuoloFilter.Fornitori,
+            IsDipendente = SuggestedRuolo == AnagraficaRuoloFilter.Dipendenti,
+            IndirizzoCountryCode = "IT",
+        };
+
+        var parameters = new DialogParameters { ["Seed"] = seed };
+        var dlg = await Dialog.ShowAsync<AnagraficaQuickCreateDialog>(
+            "Nuova anagrafica",
+            parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dlg.Result;
+
+        if (result is { Canceled: false, Data: Guid newId })
+        {
+            await OnNewAnagraficaCreated.InvokeAsync(newId);
+            await ValueChanged.InvokeAsync(newId);
+            Snackbar.Add("Anagrafica creata e selezionata.", Severity.Success);
+        }
+    }
+}

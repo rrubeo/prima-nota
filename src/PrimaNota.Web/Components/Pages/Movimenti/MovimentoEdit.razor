@@ -9,7 +9,9 @@
 @using PrimaNota.Application.Iva
 @using PrimaNota.Application.PianoConti
 @using PrimaNota.Application.PrimaNota
+@using PrimaNota.Domain.PianoConti
 @using PrimaNota.Domain.PrimaNota
+@using PrimaNota.Web.Components.Pages.Anagrafiche
 @inject IMediator Mediator
 @inject IEsercizioContext Esercizio
 @inject NavigationManager Navigation
@@ -39,7 +41,8 @@ else
                 <MudTextField @bind-Value="model.Numero" Label="Numero (fattura, ricevuta...)" />
             </MudItem>
             <MudItem xs="12" sm="6">
-                <MudSelect T="Guid" @bind-Value="model.CausaleId" Label="Causale" Required="true">
+                <MudSelect T="Guid" @bind-Value="model.CausaleId" Label="Causale" Required="true"
+                           ToStringFunc="@FormatCausale">
                     @foreach (var c in causali)
                     {
                         <MudSelectItem T="Guid" Value="@c.Id">@c.Codice — @c.Nome</MudSelectItem>
@@ -50,13 +53,13 @@ else
                 <MudTextField @bind-Value="model.Descrizione" Label="Descrizione" Required="true" />
             </MudItem>
             <MudItem xs="12" sm="3">
-                <MudSelect T="Guid?" @bind-Value="model.AnagraficaId" Label="Anagrafica (default)" Clearable="true">
-                    <MudSelectItem T="Guid?" Value="@((Guid?)null)">— nessuna —</MudSelectItem>
-                    @foreach (var a in anagrafiche)
-                    {
-                        <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.RagioneSociale</MudSelectItem>
-                    }
-                </MudSelect>
+                <AnagraficaPicker Value="model.AnagraficaId"
+                                  ValueChanged="v => model.AnagraficaId = v"
+                                  Anagrafiche="anagrafiche"
+                                  OnNewAnagraficaCreated="OnAnagraficaCreatedAsync"
+                                  Label="Anagrafica (default)"
+                                  SuggestedRuolo="HeaderSuggestedRuolo"
+                                  Disabled="@(!IsEditable)" />
             </MudItem>
             <MudItem xs="12">
                 <MudTextField @bind-Value="model.Note" Label="Note" Lines="2" />
@@ -91,36 +94,39 @@ else
                 <RowTemplate>
                     <MudTd><MudNumericField T="decimal" @bind-Value="context.Importo" HideSpinButtons="true" Disabled="!IsEditable" /></MudTd>
                     <MudTd>
-                        <MudSelect T="Guid" @bind-Value="context.ContoFinanziarioId" Disabled="!IsEditable" Dense="true">
+                        <MudSelect T="Guid" @bind-Value="context.ContoFinanziarioId" Disabled="!IsEditable"
+                                   Margin="Margin.Dense" ToStringFunc="@FormatConto">
                             @foreach (var c in conti)
                             {
-                                <MudSelectItem T="Guid" Value="@c.Id">@c.Codice</MudSelectItem>
+                                <MudSelectItem T="Guid" Value="@c.Id">@c.Codice — @c.Nome</MudSelectItem>
                             }
                         </MudSelect>
                     </MudTd>
                     <MudTd>
-                        <MudSelect T="Guid" @bind-Value="context.CategoriaId" Disabled="!IsEditable" Dense="true">
+                        <MudSelect T="Guid" @bind-Value="context.CategoriaId" Disabled="!IsEditable"
+                                   Margin="Margin.Dense" ToStringFunc="@FormatCategoria">
                             @foreach (var c in categorie)
                             {
-                                <MudSelectItem T="Guid" Value="@c.Id">@c.Codice</MudSelectItem>
+                                <MudSelectItem T="Guid" Value="@c.Id">@c.Codice — @c.Nome</MudSelectItem>
                             }
                         </MudSelect>
                     </MudTd>
                     <MudTd>
-                        <MudSelect T="Guid?" @bind-Value="context.AnagraficaId" Disabled="!IsEditable" Dense="true" Clearable="true">
-                            <MudSelectItem T="Guid?" Value="@((Guid?)null)">—</MudSelectItem>
-                            @foreach (var a in anagrafiche)
-                            {
-                                <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.RagioneSociale</MudSelectItem>
-                            }
-                        </MudSelect>
+                        <AnagraficaPicker Value="context.AnagraficaId"
+                                          ValueChanged="v => context.AnagraficaId = v"
+                                          Anagrafiche="anagrafiche"
+                                          OnNewAnagraficaCreated="OnAnagraficaCreatedAsync"
+                                          Label=""
+                                          SuggestedRuolo="@RigaSuggestedRuolo(context)"
+                                          Disabled="@(!IsEditable)" />
                     </MudTd>
                     <MudTd>
-                        <MudSelect T="Guid?" @bind-Value="context.AliquotaIvaId" Disabled="!IsEditable" Dense="true" Clearable="true">
+                        <MudSelect T="Guid?" @bind-Value="context.AliquotaIvaId" Disabled="!IsEditable"
+                                   Margin="Margin.Dense" Clearable="true" ToStringFunc="@FormatAliquota">
                             <MudSelectItem T="Guid?" Value="@((Guid?)null)">—</MudSelectItem>
                             @foreach (var a in aliquote)
                             {
-                                <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.Codice</MudSelectItem>
+                                <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.Codice — @a.Descrizione</MudSelectItem>
                             }
                         </MudSelect>
                     </MudTd>
@@ -243,6 +249,73 @@ else
     private bool IsEditable => stato == StatoMovimento.Draft;
     private bool CanAddAttachment => Id.HasValue && stato != StatoMovimento.Reconciled;
     private decimal TotaleRighe => model.Righe.Sum(r => r.Importo);
+
+    private AnagraficaRuoloFilter HeaderSuggestedRuolo
+    {
+        get
+        {
+            var causale = causali.FirstOrDefault(c => c.Id == model.CausaleId);
+            return CausaleToRuolo(causale?.Tipo);
+        }
+    }
+
+    private AnagraficaRuoloFilter RigaSuggestedRuolo(RigaMovimentoInput riga)
+    {
+        // First preference: explicit causale + category nature combined.
+        var categoria = categorie.FirstOrDefault(c => c.Id == riga.CategoriaId);
+        if (categoria is not null)
+        {
+            return categoria.Natura == NaturaCategoria.Entrata
+                ? AnagraficaRuoloFilter.Clienti
+                : AnagraficaRuoloFilter.Fornitori;
+        }
+
+        return HeaderSuggestedRuolo;
+    }
+
+    private static AnagraficaRuoloFilter CausaleToRuolo(TipoMovimento? tipo) => tipo switch
+    {
+        TipoMovimento.Incasso => AnagraficaRuoloFilter.Clienti,
+        TipoMovimento.Pagamento => AnagraficaRuoloFilter.Fornitori,
+        TipoMovimento.StipendioNetto => AnagraficaRuoloFilter.Dipendenti,
+        TipoMovimento.RimborsoNotaSpese => AnagraficaRuoloFilter.Dipendenti,
+        _ => AnagraficaRuoloFilter.Tutti,
+    };
+
+    private string FormatCausale(Guid id)
+    {
+        var c = causali.FirstOrDefault(x => x.Id == id);
+        return c is null ? string.Empty : $"{c.Codice} — {c.Nome}";
+    }
+
+    private string FormatConto(Guid id)
+    {
+        var c = conti.FirstOrDefault(x => x.Id == id);
+        return c is null ? string.Empty : $"{c.Codice} — {c.Nome}";
+    }
+
+    private string FormatCategoria(Guid id)
+    {
+        var c = categorie.FirstOrDefault(x => x.Id == id);
+        return c is null ? string.Empty : $"{c.Codice} — {c.Nome}";
+    }
+
+    private string FormatAliquota(Guid? id)
+    {
+        if (!id.HasValue)
+        {
+            return string.Empty;
+        }
+
+        var a = aliquote.FirstOrDefault(x => x.Id == id.Value);
+        return a is null ? string.Empty : a.Codice;
+    }
+
+    private async Task OnAnagraficaCreatedAsync(Guid newId)
+    {
+        anagrafiche = await Mediator.Send(new ListAnagrafiche(AnagraficaRuoloFilter.Tutti, false, null));
+        StateHasChanged();
+    }
 
     protected override async Task OnInitializedAsync()
     {

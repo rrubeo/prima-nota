@@ -1,0 +1,120 @@
+@using MediatR
+@using PrimaNota.Application.Anagrafiche
+@using PrimaNota.Application.Anagrafiche.Upsert
+@inject IMediator Mediator
+@inject ISnackbar Snackbar
+
+@* Lightweight dialog for on-the-fly creation of an anagrafica from the movement
+   editor. Fewer fields than the full page; the user can always open the full
+   edit page later from /anagrafiche to fill indirizzo, PEC, etc. *@
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" Model="model" Validation="Validator" ValidationDelay="0">
+            <MudGrid>
+                <MudItem xs="12" sm="8">
+                    <MudTextField @bind-Value="model.RagioneSociale"
+                                  Label="Ragione sociale / Nome completo"
+                                  Required="true"
+                                  For="@(() => model.RagioneSociale)" />
+                </MudItem>
+                <MudItem xs="12" sm="4" Class="d-flex align-center">
+                    <MudCheckBox T="bool" @bind-Value="model.PersonaFisica" Label="Persona fisica" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="model.CodiceFiscale" Label="Codice fiscale" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="model.PartitaIva" Label="Partita IVA" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mud-text-secondary mb-1">Ruoli</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudCheckBox T="bool" @bind-Value="model.IsCliente" Label="Cliente" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudCheckBox T="bool" @bind-Value="model.IsFornitore" Label="Fornitore" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudCheckBox T="bool" @bind-Value="model.IsDipendente" Label="Dipendente" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="model.Email" Label="Email" InputType="InputType.Email" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="model.Telefono" Label="Telefono" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="saving">
+            Crea e seleziona
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public AnagraficaInput? Seed { get; set; }
+
+    private AnagraficaInput model = new();
+    private MudForm? form;
+    private bool saving;
+    private readonly AnagraficaInputValidator validator = new();
+
+    private Func<object, string, Task<IEnumerable<string>>> Validator => async (_, prop) =>
+    {
+        var r = await validator.ValidateAsync(model);
+        return r.Errors.Where(e => e.PropertyName == prop).Select(e => e.ErrorMessage);
+    };
+
+    protected override void OnInitialized()
+    {
+        if (Seed is not null)
+        {
+            model = new AnagraficaInput
+            {
+                RagioneSociale = Seed.RagioneSociale,
+                PersonaFisica = Seed.PersonaFisica,
+                IsCliente = Seed.IsCliente,
+                IsFornitore = Seed.IsFornitore,
+                IsDipendente = Seed.IsDipendente,
+                IndirizzoCountryCode = Seed.IndirizzoCountryCode,
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SaveAsync()
+    {
+        if (form is null) return;
+        await form.Validate();
+        if (!form.IsValid)
+        {
+            Snackbar.Add("Correggi gli errori.", Severity.Warning);
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            var id = await Mediator.Send(new CreateAnagrafica(model));
+            MudDialog.Close(DialogResult.Ok(id));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}
