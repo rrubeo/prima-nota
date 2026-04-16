@@ -16,7 +16,8 @@ configurazione — niente viene condiviso tra ambienti.
 | **Host app** | `https://localhost:7070` (`dotnet run`) | IIS su `iis-staging.azienda.local` | IIS su `iis.azienda.local` |
 | **Hostname** | `localhost` | `primanota-staging.azienda.local` | `primanota.azienda.local` |
 | **Dove vive la connection string** | `dotnet user-secrets` del progetto Web | env variable `Database__ConnectionString` sull'App Pool IIS | idem |
-| **Chi applica le migration** | dev (`dotnet ef database update` o startup auto) | GitHub Actions → `sqlcmd` (workflow `deploy-staging.yml`) | GitHub Actions → `sqlcmd` (workflow `deploy-production.yml`) |
+| **Chi crea il database** | DBA (manuale, una sola volta per ambiente) | DBA (manuale, una sola volta) | DBA (manuale, una sola volta) |
+| **Chi crea/aggiorna lo schema** | app allo startup (`DbContext.Database.MigrateAsync`) | app allo startup (idem) | app allo startup (idem) |
 | **Trigger deploy** | — | push su `develop` | push su `main` + approvazione manuale |
 | **Dati** | finti, generati con Bogus | dataset realistico ma anonimizzato | dati reali (GDPR: accesso ristretto, backup cifrati) |
 | **ASPNETCORE_ENVIRONMENT** | `Development` | `Staging` | `Production` |
@@ -54,10 +55,9 @@ Su ogni server IIS (staging e produzione):
 ### Prerequisiti SQL Server
 
 - **SQL Server 2022 Standard** (o 2019 minimo) raggiungibile dalla macchina IIS.
-- Abilitare **TDE** (Transparent Data Encryption) sul database `PrimaNota`.
-- Creare due login SQL separati:
-  - `primanota_app` — login runtime con permessi `db_datareader + db_datawriter + db_ddladmin` (serve a Hangfire per creare il suo schema).
-  - `primanota_migrator` — login di deploy con `db_owner` (usato solo da `sqlcmd` nel workflow per applicare migrations).
+- Abilitare **TDE** (Transparent Data Encryption) sul database di produzione.
+- Il **DBA crea manualmente** un database vuoto per ciascun ambiente (vedi sezione 3).
+- Un **unico login SQL** per ambiente con ruolo `db_owner` (serve sia per creare/aggiornare lo schema all'avvio dell'app, sia a Hangfire per creare il proprio schema).
 - Pianificare backup: full giornaliero + log ogni 15 min.
 
 ---
@@ -87,104 +87,109 @@ Copiare `deploy/iis/web.config` nella physical path iniziale (il workflow lo inc
 
 ## 3. Database — primo setup
 
-Lo script seguente crea **un ambiente DB completo** (database + login + user db_owner).
-È lo **stesso script** che si usa per Dev (se su SQL Server reale), Staging e Production,
-variando i parametri `$DbName` e `$LoginName`.
+La responsabilità del database è **tutta sul DBA** (una volta per ambiente):
 
-Eseguirlo con un account con privilegi `sysadmin` sul server SQL Server:
+1. **Crea il database vuoto** con collation consigliata `Latin1_General_CI_AS`.
+2. **Crea il login SQL Server** dedicato a quell'ambiente.
+3. **Mappa** il login come `USER` del database con ruolo `db_owner`.
+
+Esempio SSMS / `sqlcmd` per l'ambiente Staging (ripetere 1:1 cambiando i nomi per Dev
+e Production):
 
 ```sql
--- ===========================================================================
--- Prima Nota — DB + Login provisioning (riusabile per Dev / Staging / Prod)
--- Parametri da sostituire:
---   :setvar DbName        PrimaNota_Staging        -- nome database
---   :setvar LoginName     primanota_app_staging    -- nome login SQL
---   :setvar LoginPassword Strong_Password_Here!    -- password login SQL
--- ===========================================================================
-
--- 1. Login a livello istanza
-IF SUSER_ID('$(LoginName)') IS NULL
-BEGIN
-    CREATE LOGIN [$(LoginName)]
-        WITH PASSWORD = N'$(LoginPassword)',
-             CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
-END
+-- 1. Database
+CREATE DATABASE [PrimaNota_Staging] COLLATE Latin1_General_CI_AS;
+ALTER DATABASE [PrimaNota_Staging] SET RECOVERY FULL;       -- Staging / Production
 GO
 
--- 2. Database
-IF DB_ID('$(DbName)') IS NULL
-BEGIN
-    CREATE DATABASE [$(DbName)] COLLATE Latin1_General_CI_AS;
-END
+-- 2. Login
+CREATE LOGIN [primanota_app_staging]
+    WITH PASSWORD = N'REDACTED_STRONG_PWD',
+         DEFAULT_DATABASE = [PrimaNota_Staging],
+         CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
 GO
 
-USE [$(DbName)];
+-- 3. User + db_owner
+USE [PrimaNota_Staging];
 GO
-
--- 3. User mappato al login + db_owner (unico ruolo, come da scelta d'ambiente)
-IF USER_ID('$(LoginName)') IS NULL
-BEGIN
-    CREATE USER [$(LoginName)] FOR LOGIN [$(LoginName)];
-END
+CREATE USER [primanota_app_staging] FOR LOGIN [primanota_app_staging];
+ALTER ROLE db_owner ADD MEMBER [primanota_app_staging];
 GO
-
-ALTER ROLE db_owner ADD MEMBER [$(LoginName)];
-GO
-
--- 4. (Production e staging) Abilita TDE.
---    Per dettagli completi e rotazione chiavi, vedi MS docs "Transparent Data Encryption".
---    Lo skip automatico: TDE non è necessario in Development.
 ```
 
-Eseguire lo script con `sqlcmd` passando i parametri:
+Valori consigliati:
 
-```powershell
-sqlcmd -S sql-staging.azienda.local -E `
-  -v DbName="PrimaNota_Staging" `
-      LoginName="primanota_app_staging" `
-      LoginPassword="REDACTED_STRONG_PWD" `
-  -i deploy/sql/provision-environment.sql
-```
+| Ambiente | Database | Login |
+|----------|----------|-------|
+| Development | `PrimaNota_Dev` | `primanota_app_dev` |
+| Staging | `PrimaNota_Staging` | `primanota_app_staging` |
+| Production | `PrimaNota_Production` | `primanota_app_prod` |
 
-> Lo script è reso idempotente dai check `IF SUSER_ID / DB_ID / USER_ID IS NULL`,
-> quindi puoi lanciarlo più volte senza effetti collaterali.
+### 3.1 Schema creato/aggiornato dall'app allo startup
 
-### Migrations
+Non occorre creare tabelle né applicare migration a mano. L'app, al primo avvio di
+ogni ambiente, chiama `DbContext.Database.MigrateAsync()` in `Program.cs` →
+`InitializeInfrastructureAsync()` e crea/aggiorna schema (`app`, `identity`) e tabelle.
+Hangfire, a sua volta, crea autonomamente lo schema `hangfire` al primo startup — per
+questo il login deve avere `db_owner` (non solo `ddl_admin` + `datareader` + `datawriter`).
 
-Le migration vivono in `deploy/sql/migrations/` come script SQL numerati:
+### 3.2 Trade-off noto
 
-```
-001_Initial.sql
-002_AddIdentity.sql
-003_AddEsercizi.sql
-004_AddAuditLog.sql
-```
-
-Sono generati con `dotnet ef migrations script --idempotent`, quindi possono essere
-ri-applicati su DB già aggiornato senza effetti collaterali.
-
-Il workflow di deploy GitHub Actions applica automaticamente `migrations.sql`
-(concatenazione di tutte le migration, idempotente) via `sqlcmd` con le credenziali
-del login dell'ambiente target.
+Le migration con DDL lunga (es. creazione indice su tabella multi-milione di righe)
+possono far aspettare il primo HTTP request dopo un deploy. Per un'app con carico
+modesto è accettabile. Se in futuro serve disaccoppiare lo schema change dal restart,
+si può applicare a mano uno script `.sql` pre-generato (gli script idempotenti sono
+comunque committati in `deploy/sql/migrations/`, generati con
+`dotnet ef migrations script --idempotent`) e disattivare `MigrateAsync` via una
+configurazione a scelta.
 
 ---
 
 ## 4. Segreti e configurazione
 
-I segreti **non** vivono in `appsettings.*.json`: sono environment variables lette da IIS.
+### 4.1 Dove vivono le credenziali DB (riassunto per ambiente)
+
+Le credenziali del database **non sono mai** in `appsettings.*.json`, né su GitHub, né nel
+repo. Per ciascun ambiente vivono in un posto diverso:
+
+| Ambiente | Posto | Chiave | Come si imposta |
+|----------|-------|--------|------------------|
+| **Development** | `dotnet user-secrets` del progetto `PrimaNota.Web` (file locale `~/.microsoft/usersecrets/prima-nota-web/secrets.json` su Linux/macOS, `%APPDATA%\Microsoft\UserSecrets\prima-nota-web\` su Windows) | `Database:ConnectionString` | `dotnet user-secrets set "Database:ConnectionString" "..."` |
+| **Staging** | Environment variable dell'**App Pool IIS** `PrimaNota.Staging` sul server IIS di staging | `Database__ConnectionString` (doppio underscore → mappa a `Database:ConnectionString`) | `appcmd.exe` come Administrator (vedi §4.3) |
+| **Production** | Environment variable dell'**App Pool IIS** `PrimaNota.Production` sul server IIS di produzione | `Database__ConnectionString` | `appcmd.exe` come Administrator |
+
+Esempi di valore (sostituire con i tuoi dati reali):
+
+```
+Development
+  Server=localhost,1433;Database=PrimaNota_Dev;User Id=primanota_app_dev;Password=...;Encrypt=True;TrustServerCertificate=True;
+
+Staging
+  Server=sql-staging.azienda.local,1433;Database=PrimaNota_Staging;User Id=primanota_app_staging;Password=...;Encrypt=True;TrustServerCertificate=False;
+
+Production
+  Server=sql.azienda.local,1433;Database=PrimaNota_Production;User Id=primanota_app_prod;Password=...;Encrypt=True;TrustServerCertificate=False;
+```
+
+> Regola d'oro: **la password del login DB non transita mai in GitHub**. Il workflow di
+> CI/CD non ha bisogno delle credenziali database perché non tocca il DB (lo schema lo
+> gestisce l'app allo startup).
+
+### 4.2 Altre variabili di ambiente da impostare sull'App Pool IIS
+
+Oltre a `Database__ConnectionString`, sui server di staging/produzione vanno impostate:
 
 | Variabile | Obbligatoria | Descrizione |
 |-----------|--------------|-------------|
 | `ASPNETCORE_ENVIRONMENT` | Sì | `Staging` o `Production` |
-| `Database__ConnectionString` | Sì | Connection string SQL Server (login `primanota_app`) |
+| `Database__ConnectionString` | Sì | Vedi §4.1 |
 | `Authentication__Google__ClientId` | Se Google OAuth attivo | OAuth client id |
 | `Authentication__Google__ClientSecret` | Se Google OAuth attivo | OAuth client secret |
 | `Identity__Bootstrap__Email` | Solo al primo avvio | Email admin iniziale |
 | `Identity__Bootstrap__Password` | Solo al primo avvio | Password admin (≥12 caratteri, strong) |
 | `Identity__Bootstrap__FullName` | Solo al primo avvio | Nome admin iniziale |
-| `DOTNET_ENVIRONMENT` | No | Ignorato da ASP.NET Core, ma utile per tool EF |
 
-### Configurazione via appcmd (esempio completo per staging)
+### 4.3 Configurazione via appcmd (esempio completo)
 
 Eseguire come Administrator sul server IIS, una sola volta per ciascun ambiente:
 
@@ -236,14 +241,15 @@ Dopo aver popolato l'admin iniziale con successo, **rimuovere le variabili `Iden
 
 ### Segreti e variabili da configurare (una tantum)
 
-Su GitHub → Settings → Environments → `staging` (poi duplicare per `production`):
+Su GitHub → Settings → Environments → `staging` (poi duplicare per `production`).
+
+Il workflow **non tocca mai il database** (niente `sqlcmd`, niente migration): lo schema
+è gestito dall'app allo startup. Quindi servono solo i segreti IIS/WebDeploy.
 
 **Secrets (valori sensibili, mai visualizzati):**
 
 | Nome | Esempio | Scopo |
 |------|---------|-------|
-| `STAGING_DB_USER` | `primanota_app` | Login SQL Server (db_owner sul DB) |
-| `STAGING_DB_PASSWORD` | `••••••••••` | Password del login |
 | `STAGING_IIS_USER` | `DOMAIN\\deploy-svc` o `deploy@azienda` | Utente abilitato a WebDeploy (IIS Management Service) |
 | `STAGING_IIS_PASS` | `••••••••••` | Password dell'utente WebDeploy |
 
@@ -251,16 +257,13 @@ Su GitHub → Settings → Environments → `staging` (poi duplicare per `produc
 
 | Nome | Esempio | Scopo |
 |------|---------|-------|
-| `STAGING_DB_SERVER` | `sql-staging.azienda.local` o `sql-staging.azienda.local,1433` | Nome/istanza SQL Server + porta |
-| `STAGING_DB_NAME` | `PrimaNota_Staging` | Nome del database |
 | `STAGING_IIS_HOST` | `iis-staging.azienda.local` | Host IIS (porta 8172 per Management Service) |
 | `STAGING_IIS_SITE` | `PrimaNota.Staging` | Nome del sito IIS creato da `app-pool-setup.ps1` |
 | `STAGING_HOSTNAME` | `primanota-staging.azienda.local` | Hostname HTTPS per lo smoke test |
 
-> Il workflow usa lo **stesso** utente di database (db_owner) sia per applicare le migration
-> sia come runtime dell'app. Questa è la configurazione che hai scelto: un singolo login SQL.
-> Se in futuro vuoi separare i privilegi (un migrator con db_owner e un runtime con
-> datareader+datawriter+ddladmin), basta aggiungere due coppie user/password distinte.
+> Le credenziali del database (server, nome, login, password) **non** si mettono su GitHub:
+> vivono solo come env variable `Database__ConnectionString` sull'App Pool IIS (vedi
+> [sezione 4](#4-segreti-e-configurazione)).
 
 Se `STAGING_IIS_HOST` non è impostato, il job `deploy` viene saltato (il workflow produce comunque l'artefatto).
 
@@ -271,8 +274,9 @@ Se `STAGING_IIS_HOST` non è impostato, il job `deploy` viene saltato (il workfl
 
 ### Flusso del workflow
 
-1. `publish`: build Release, `dotnet publish` con runtime `win-x64`, generazione `migrations.sql` idempotente, copia di `web.config`, upload artefatto.
-2. `deploy`: apply `migrations.sql` via `sqlcmd`, deploy via `msdeploy.exe`, smoke test su `/health`.
+1. `publish`: build Release, `dotnet publish` con runtime `win-x64`, copia di `web.config`, upload artefatto.
+2. `deploy`: deploy via `msdeploy.exe`, smoke test con retry su `/health` (l'app al primo
+   request dopo deploy applica le migration, quindi il retry gestisce il tempo di schema upgrade).
 
 Per il deploy in **produzione**, duplicare `deploy-staging.yml` in `deploy-production.yml` con:
 - trigger su `push` a `main`

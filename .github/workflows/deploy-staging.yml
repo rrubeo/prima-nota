@@ -12,7 +12,6 @@ concurrency:
 env:
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
-  PRIMANOTA_SKIP_DB_INIT: 'true'
 
 jobs:
   publish:
@@ -44,15 +43,6 @@ jobs:
           --runtime win-x64
           --self-contained false
 
-      - name: Generate deployment SQL
-        run: |
-          dotnet tool restore
-          dotnet ef migrations script \
-            --project src/PrimaNota.Infrastructure \
-            --startup-project src/PrimaNota.Web \
-            --output publish/migrations.sql \
-            --idempotent
-
       - name: Copy IIS web.config override
         run: cp deploy/iis/web.config publish/web.config
 
@@ -78,30 +68,6 @@ jobs:
           name: primanota-web-staging
           path: publish
 
-      - name: Apply DB migrations (idempotent script via sqlcmd)
-        shell: pwsh
-        env:
-          DB_SERVER:   ${{ vars.STAGING_DB_SERVER }}
-          DB_NAME:     ${{ vars.STAGING_DB_NAME }}
-          DB_USER:     ${{ secrets.STAGING_DB_USER }}
-          DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
-        run: |
-          foreach ($pair in @(
-              @{ Name = 'STAGING_DB_SERVER (variable)';  Value = $env:DB_SERVER   },
-              @{ Name = 'STAGING_DB_NAME (variable)';    Value = $env:DB_NAME     },
-              @{ Name = 'STAGING_DB_USER (secret)';      Value = $env:DB_USER     },
-              @{ Name = 'STAGING_DB_PASSWORD (secret)';  Value = $env:DB_PASSWORD }
-          )) {
-              if ([string]::IsNullOrWhiteSpace($pair.Value)) {
-                  Write-Error "$($pair.Name) is not configured on the staging environment."
-                  exit 1
-              }
-          }
-          sqlcmd -S "$env:DB_SERVER" -d "$env:DB_NAME" `
-                 -U "$env:DB_USER" -P "$env:DB_PASSWORD" `
-                 -N -C `
-                 -b -i publish/migrations.sql
-
       - name: WebDeploy to IIS
         shell: pwsh
         env:
@@ -117,14 +83,20 @@ jobs:
             -dest:contentPath="$env:IIS_SITE",computerName="https://$env:IIS_HOST:8172/msdeploy.axd?site=$env:IIS_SITE",username="$env:IIS_USER",password="$env:IIS_PASS",authtype="Basic" `
             -allowUntrusted
 
-      - name: Smoke test /health
+      # Schema creation / upgrade runs inside the app itself:
+      # PrimaNota.Web.Program.cs invokes InitializeInfrastructureAsync()
+      # which calls DbContext.Database.MigrateAsync() at startup.
+      # The first HTTP request after deploy therefore waits for migrations
+      # to complete — that's why the smoke test polls /health with retries.
+
+      - name: Smoke test /health (post-deploy + auto-migration)
         shell: pwsh
         env:
           HEALTH_URL: https://${{ vars.STAGING_HOSTNAME }}/health
         run: |
-          for ($i = 1; $i -le 10; $i++) {
+          for ($i = 1; $i -le 20; $i++) {
             try {
-              $resp = Invoke-WebRequest -Uri $env:HEALTH_URL -UseBasicParsing -TimeoutSec 10
+              $resp = Invoke-WebRequest -Uri $env:HEALTH_URL -UseBasicParsing -TimeoutSec 15
               if ($resp.StatusCode -eq 200) {
                 Write-Host "Health OK (attempt $i)"
                 exit 0
@@ -132,7 +104,7 @@ jobs:
             } catch {
               Write-Host "Attempt $i failed: $_"
             }
-            Start-Sleep -Seconds 5
+            Start-Sleep -Seconds 6
           }
-          Write-Error "Health check did not recover within timeout."
+          Write-Error "Health check did not recover within timeout. Check the app pool logs for migration errors."
           exit 1
