@@ -12,6 +12,7 @@ using PrimaNota.Infrastructure.Configuration;
 using PrimaNota.Infrastructure.Esercizi;
 using PrimaNota.Infrastructure.Identity;
 using PrimaNota.Infrastructure.Persistence;
+using PrimaNota.Infrastructure.Storage;
 using PrimaNota.Shared.Clock;
 
 namespace PrimaNota.Infrastructure;
@@ -42,6 +43,13 @@ public static class DependencyInjection
         services.AddOptions<IdentityBootstrapOptions>()
             .Bind(configuration.GetSection(IdentityBootstrapOptions.SectionName))
             .ValidateDataAnnotations();
+
+        services.AddOptions<AttachmentStorageOptions>()
+            .Bind(configuration.GetSection(AttachmentStorageOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddSingleton<IAttachmentStorage, FileSystemAttachmentStorage>();
 
         services.AddHttpContextAccessor();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
