@@ -115,3 +115,7 @@ artifacts/
 coverage/
 *.coveragexml
 doe-framework/.startup-prompt.txt
+
+# --- Runtime data (never commit user uploads or runtime logs) ---
+src/PrimaNota.Web/attachments/
+src/PrimaNota.Web/logs/
