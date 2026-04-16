@@ -55,3 +55,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migrations `AddAnagrafiche`, `AddPianoContiCausaliIva`, `AddContiFinanziari` with idempotent SQL scripts (005, 006, 007)
 - `IApplicationDbContext` exposes `DbSet` for Anagrafiche, Categorie, Causali, AliquoteIva, ContiFinanziari
 - `.editorconfig` adjustments: SA1402/SA1649 disabled in Application (MediatR convention), SA1204 and S1135 disabled globally (opinionated ordering / forward-reference TODOs)
+
+### Phase 3 — Core Prima Nota (Module 07)
+
+- `MovimentoPrimaNota` aggregate with owned collections `RigaMovimento` (split) and `Allegato` (attachments); signed-amount lines, invariants (≥ 1 line, giroconto balance = 0, date belongs to fiscal year, confirmed/reconciled non-editable)
+- State machine `StatoMovimento`: Draft → Confirmed → Reconciled with transitions
+- Rowversion concurrency token on the aggregate
+- `IAttachmentStorage` + `FileSystemAttachmentStorage` (streamed SHA-256, traversal-safe, 20 MB default cap)
+- CQRS: Create/Update/Confirm/Unconfirm/Delete + List (filters stato/conto/categoria/anagrafica/causale/data/importo/search) + Get; UploadAllegato/GetAllegatoContent/DeleteAllegato
+- `GetSaldoConto` and `GetDashboardStats` queries
+- Minimal API `/allegati/{id}` (download) and `/allegati/{movimentoId}/upload`
+- `/movimenti` virtualised list + `/movimenti/{id}` edit page with dynamic lines editor and attachments panel
+- Home dashboard binds to real KPI (saldo totale/per-type, entrate-uscite mese, movimenti YTD + bozze); recenti panel
+- `ListContiFinanziariHandler` now computes real SaldoCorrente
+- Migration `AddMovimentiPrimaNota` + `deploy/sql/migrations/008_AddMovimentiPrimaNota.sql`
+- 15 new unit tests on MovimentoPrimaNota (18 total green)
