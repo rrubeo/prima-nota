@@ -12,6 +12,7 @@ using PrimaNota.Infrastructure.Clock;
 using PrimaNota.Infrastructure.Configuration;
 using PrimaNota.Infrastructure.Esercizi;
 using PrimaNota.Infrastructure.Identity;
+using PrimaNota.Infrastructure.Ocr;
 using PrimaNota.Infrastructure.Persistence;
 using PrimaNota.Infrastructure.Reporting;
 using PrimaNota.Infrastructure.Storage;
@@ -54,6 +55,11 @@ public static class DependencyInjection
         services.AddSingleton<IAttachmentStorage, FileSystemAttachmentStorage>();
         services.AddSingleton<IEstratoContoParser, PdfEstratoContoParser>();
         services.AddSingleton<IExcelExporter, ClosedXmlExcelExporter>();
+
+        services.AddOptions<OpenAiOptions>()
+            .Bind(configuration.GetSection(OpenAiOptions.SectionName));
+        services.AddHttpClient("OpenAi");
+        services.AddScoped<IReceiptAnalyzer, OpenAiReceiptAnalyzer>();
 
         services.AddHttpContextAccessor();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();

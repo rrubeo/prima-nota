@@ -65,6 +65,17 @@ else
             <MudText Typo="Typo.body2" Class="mud-text-secondary mr-3">
                 Totale: @TotaleRighe.ToString("N2", IC) € · Rimborso: @TotaleRimborso.ToString("N2", IC) €
             </MudText>
+            <MudFileUpload T="IBrowserFile" OnFilesChanged="OnReceiptSelected"
+                           Accept=".jpg,.jpeg,.png,.webp,.heic"
+                           Hidden="true" MaximumFileCount="1" Disabled="@(!IsEditable || scanning)">
+                <ActivatorContent>
+                    <MudButton HtmlTag="label" Variant="Variant.Outlined" Color="Color.Secondary"
+                               StartIcon="@Icons.Material.Filled.CameraAlt"
+                               Disabled="@(!IsEditable || scanning)">
+                        @(scanning ? "Analisi in corso..." : "Scansiona scontrino")
+                    </MudButton>
+                </ActivatorContent>
+            </MudFileUpload>
             <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="AddRiga" Disabled="@(!IsEditable)">Aggiungi</MudButton>
         </div>
 
@@ -155,6 +166,7 @@ else
     private Guid? movimentoRimborsoId;
     private bool loading;
     private bool saving;
+    private bool scanning;
 
     private IReadOnlyList<AnagraficaListItemDto> dipendenti = Array.Empty<AnagraficaListItemDto>();
     private IReadOnlyList<CategoriaDto> categorie = Array.Empty<CategoriaDto>();
@@ -219,6 +231,57 @@ else
     }
 
     private void AddRiga() => model.Righe.Add(new RigaSpesaInput { Data = DateOnly.FromDateTime(DateTime.UtcNow) });
+
+    private async Task OnReceiptSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null)
+        {
+            return;
+        }
+
+        scanning = true;
+        StateHasChanged();
+        try
+        {
+            await using var stream = file.OpenReadStream(10L * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var bytes = ms.ToArray();
+
+            var result = await Mediator.Send(new AnalyzeReceipt(bytes, file.ContentType));
+
+            var riga = new RigaSpesaInput
+            {
+                Data = result.Data ?? DateOnly.FromDateTime(DateTime.UtcNow),
+                Descrizione = result.Descrizione ?? "Spesa da scontrino",
+                Importo = result.Importo ?? 0m,
+                TipoPagamento = TipoPagamentoSpesa.MezzoProprio,
+            };
+
+            if (result.CategoriaHint is not null)
+            {
+                var match = categorie.FirstOrDefault(c =>
+                    c.Nome.Contains(result.CategoriaHint, StringComparison.OrdinalIgnoreCase)
+                    || c.Codice.Contains(result.CategoriaHint, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                {
+                    riga.CategoriaId = match.Id;
+                }
+            }
+
+            model.Righe.Add(riga);
+            Snackbar.Add($"Scontrino analizzato: {result.Descrizione} — {result.Importo:N2} €", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore analisi scontrino: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            scanning = false;
+        }
+    }
 
     private async Task SaveAsync()
     {
