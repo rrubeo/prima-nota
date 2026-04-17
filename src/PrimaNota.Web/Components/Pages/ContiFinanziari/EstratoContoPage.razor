@@ -37,7 +37,7 @@
             <MudFileUpload T="IBrowserFile"
                            OnFilesChanged="OnFileSelected"
                            Accept=".pdf"
-                           Hidden="false"
+                           Hidden="true"
                            MaximumFileCount="1"
                            Disabled="@(uploading || uploadContoId == Guid.Empty)">
                 <ActivatorContent>

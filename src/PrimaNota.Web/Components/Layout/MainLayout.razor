@@ -1,5 +1,8 @@
 @inherits LayoutComponentBase
 @using System.Security.Claims
+@using PrimaNota.Application.Abstractions
+@inject IEsercizioContext Esercizio
+@inject NavigationManager Navigation
 
 <MudThemeProvider Theme="@PrimaNotaTheme.Theme" />
 <MudPopoverProvider />
@@ -77,8 +80,16 @@
 
             <MudMainContent Class="pn-main">
                 <MudContainer MaxWidth="MaxWidth.False" Class="pn-container pa-8">
-                    <div class="pn-year-chip">
-                        Esercizio @CurrentYear
+                    <div class="pn-year-selector">
+                        <MudSelect T="int" Value="Esercizio.Anno" ValueChanged="OnYearChanged"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Label="Esercizio" Dense="true" Style="width:140px">
+                            @for (var y = DateTime.UtcNow.Year; y >= DateTime.UtcNow.Year - 10; y--)
+                            {
+                                var val = y;
+                                <MudSelectItem T="int" Value="val">@val</MudSelectItem>
+                            }
+                        </MudSelect>
                     </div>
                     @Body
                 </MudContainer>
@@ -167,12 +178,10 @@
     .pn-container {
         position: relative;
     }
-    .pn-year-chip {
+    .pn-year-selector {
         position: absolute;
         right: 2rem;
-        top: 2rem;
-        font-size: .875rem;
-        color: #6b7280;
+        top: 1.5rem;
     }
 </style>
 
@@ -180,7 +189,11 @@
     private bool drawerOpen = true;
     private string? searchText;
 
-    private int CurrentYear => DateTime.UtcNow.Year;
+    private void OnYearChanged(int anno)
+    {
+        Esercizio.SwitchTo(anno);
+        Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+    }
 
     private static string Initials(ClaimsPrincipal user)
     {

@@ -18,7 +18,20 @@
 
 <PageTitle>Fatture @TabLabel · Prima Nota</PageTitle>
 
-<MudText Typo="Typo.h4" GutterBottom="true">Fatture</MudText>
+<div class="d-flex align-center mb-4 gap-3">
+    <MudText Typo="Typo.h4">Fatture</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Outlined" Color="Color.Default"
+               StartIcon="@Icons.Material.Filled.UploadFile"
+               OnClick="OpenImportXmlAsync">
+        Importa XML
+    </MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="NuovaFattura">
+        Nuova fattura
+    </MudButton>
+</div>
 
 <MudTabs ActivePanelIndex="tabIndex" ActivePanelIndexChanged="OnTabChanged" Elevation="0" ApplyEffectsToContainer="true" Class="mb-4">
     <MudTabPanel Text="Attive (vendite)" />
@@ -27,30 +40,19 @@
 
 <MudPaper Class="pa-4 mb-4" Elevation="0">
     <MudGrid>
-        <MudItem xs="12" sm="4">
+        <MudItem xs="12" sm="6">
             <MudTextField T="string" Label="Cerca (descrizione, numero, anagrafica)"
                           @bind-Value="cerca" @bind-Value:after="ReloadAsync"
                           Clearable="true" Adornment="Adornment.Start"
                           AdornmentIcon="@Icons.Material.Filled.Search" />
         </MudItem>
-        <MudItem xs="6" sm="2">
+        <MudItem xs="6" sm="3">
             <MudDatePicker Label="Dal" Date="@DateOnlyToDate(dateFrom)"
                            DateChanged="d => { dateFrom = DateToDateOnly(d); _ = ReloadAsync(); }" />
         </MudItem>
-        <MudItem xs="6" sm="2">
+        <MudItem xs="6" sm="3">
             <MudDatePicker Label="Al" Date="@DateOnlyToDate(dateTo)"
                            DateChanged="d => { dateTo = DateToDateOnly(d); _ = ReloadAsync(); }" />
-        </MudItem>
-        <MudItem xs="12" sm="4" Class="d-flex align-center justify-end gap-2">
-            <MudTooltip Text="Importa fattura elettronica XML">
-                <MudIconButton Icon="@Icons.Material.Filled.UploadFile"
-                               Color="Color.Default" OnClick="OpenImportXmlAsync" />
-            </MudTooltip>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Add"
-                       OnClick="NuovaFattura">
-                Nuova fattura
-            </MudButton>
         </MudItem>
     </MudGrid>
 </MudPaper>
