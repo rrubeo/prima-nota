@@ -162,7 +162,9 @@
     private void OnYearChanged(int anno)
     {
         Esercizio.SwitchTo(anno);
-        Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        var uri = new Uri(Navigation.Uri);
+        var path = uri.GetLeftPart(UriPartial.Path);
+        Navigation.NavigateTo($"{path}?_y={anno}", forceLoad: true);
     }
 
     private static string Initials(ClaimsPrincipal user)
