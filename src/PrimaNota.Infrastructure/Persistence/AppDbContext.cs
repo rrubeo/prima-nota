@@ -6,6 +6,7 @@ using PrimaNota.Domain.Azienda;
 using PrimaNota.Domain.ContiFinanziari;
 using PrimaNota.Domain.Esercizi;
 using PrimaNota.Domain.Iva;
+using PrimaNota.Domain.NoteSpese;
 using PrimaNota.Domain.PianoConti;
 using PrimaNota.Domain.PrimaNota;
 using PrimaNota.Infrastructure.Identity;
@@ -53,6 +54,9 @@ public sealed class AppDbContext
 
     /// <summary>Gets the <see cref="EstratoContoImport"/> set.</summary>
     public DbSet<EstratoContoImport> EstrattiConto => Set<EstratoContoImport>();
+
+    /// <summary>Gets the <see cref="NotaSpese"/> set.</summary>
+    public DbSet<NotaSpese> NoteSpese => Set<NotaSpese>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)

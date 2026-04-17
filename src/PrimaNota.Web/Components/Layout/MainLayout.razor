@@ -161,10 +161,10 @@
 
     private void OnYearChanged(int anno)
     {
-        Esercizio.SwitchTo(anno);
-        var uri = new Uri(Navigation.Uri);
-        var path = uri.GetLeftPart(UriPartial.Path);
-        Navigation.NavigateTo($"{path}?_y={anno}", forceLoad: true);
+        var currentPath = new Uri(Navigation.Uri).AbsolutePath;
+        Navigation.NavigateTo(
+            $"/api/switch-year/{anno}?returnUrl={Uri.EscapeDataString(currentPath)}",
+            forceLoad: true);
     }
 
     private static string Initials(ClaimsPrincipal user)

@@ -5,6 +5,7 @@ using PrimaNota.Domain.Azienda;
 using PrimaNota.Domain.ContiFinanziari;
 using PrimaNota.Domain.Esercizi;
 using PrimaNota.Domain.Iva;
+using PrimaNota.Domain.NoteSpese;
 using PrimaNota.Domain.PianoConti;
 using Movimento = PrimaNota.Domain.PrimaNota.MovimentoPrimaNota;
 
@@ -46,6 +47,9 @@ public interface IApplicationDbContext
 
     /// <summary>Gets the <see cref="EstratoContoImport"/> set.</summary>
     DbSet<EstratoContoImport> EstrattiConto { get; }
+
+    /// <summary>Gets the <see cref="NotaSpese"/> set.</summary>
+    DbSet<NotaSpese> NoteSpese { get; }
 
     /// <summary>Persists pending changes to the underlying store.</summary>
     /// <param name="cancellationToken">Token to cancel the operation.</param>

@@ -1,0 +1,315 @@
+@page "/note-spese/nuova"
+@page "/note-spese/{Id:guid}"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireAuthenticated)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.Anagrafiche
+@using PrimaNota.Application.ContiFinanziari
+@using PrimaNota.Application.NoteSpese
+@using PrimaNota.Application.PianoConti
+@using PrimaNota.Domain.NoteSpese
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>@Title · Prima Nota</PageTitle>
+
+<div class="d-flex align-center mb-4 gap-3">
+    <MudText Typo="Typo.h4">@Title</MudText>
+    @if (stato != StatoNotaSpese.Bozza)
+    {
+        <MudChip T="string" Size="Size.Small" Color="@StatoColor(stato)" Variant="Variant.Filled">@stato</MudChip>
+    }
+    @if (!string.IsNullOrWhiteSpace(motivoRifiuto))
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Class="ml-3">@motivoRifiuto</MudAlert>
+    }
+</div>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="0">
+        <MudGrid>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="Guid" @bind-Value="model.DipendenteId" Label="Dipendente" Required="true"
+                           Disabled="@(!IsEditable)">
+                    @foreach (var d in dipendenti)
+                    {
+                        <MudSelectItem T="Guid" Value="@d.Id">@d.RagioneSociale</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6" sm="2">
+                <MudNumericField T="int" @bind-Value="model.Mese" Label="Mese" Min="1" Max="12" Disabled="@(!IsEditable)" />
+            </MudItem>
+            <MudItem xs="6" sm="2">
+                <MudNumericField T="int" @bind-Value="model.Anno" Label="Anno" Disabled="@(!IsEditable)" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudTextField @bind-Value="model.Descrizione" Label="Descrizione" Required="true" Disabled="@(!IsEditable)" />
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="0">
+        <div class="d-flex align-center mb-3">
+            <MudText Typo="Typo.h6">Righe spesa</MudText>
+            <MudSpacer />
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mr-3">
+                Totale: @TotaleRighe.ToString("N2", IC) € · Rimborso: @TotaleRimborso.ToString("N2", IC) €
+            </MudText>
+            <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="AddRiga" Disabled="@(!IsEditable)">Aggiungi</MudButton>
+        </div>
+
+        @if (model.Righe.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">Nessuna riga. Aggiungine almeno una.</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="model.Righe" Dense="true" Hover="true" Breakpoint="Breakpoint.None">
+                <HeaderContent>
+                    <MudTh Style="width:120px">Data</MudTh>
+                    <MudTh>Descrizione</MudTh>
+                    <MudTh Style="width:120px">Importo €</MudTh>
+                    <MudTh>Categoria</MudTh>
+                    <MudTh Style="width:150px">Pagamento</MudTh>
+                    <MudTh Style="width:40px"></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>
+                        <MudDatePicker Date="@DateOnlyToDate(context.Data)"
+                                       DateChanged="@(d => { if (d.HasValue) context.Data = DateOnly.FromDateTime(d.Value); })"
+                                       Disabled="@(!IsEditable)" Margin="Margin.Dense" />
+                    </MudTd>
+                    <MudTd><MudTextField @bind-Value="context.Descrizione" Margin="Margin.Dense" Disabled="@(!IsEditable)" /></MudTd>
+                    <MudTd><MudNumericField T="decimal" @bind-Value="context.Importo" HideSpinButtons="true" Disabled="@(!IsEditable)" Margin="Margin.Dense" /></MudTd>
+                    <MudTd>
+                        <MudSelect T="Guid" @bind-Value="context.CategoriaId" Margin="Margin.Dense" Disabled="@(!IsEditable)">
+                            @foreach (var c in categorie)
+                            {
+                                <MudSelectItem T="Guid" Value="@c.Id">@c.Codice</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudTd>
+                    <MudTd>
+                        <MudSelect T="TipoPagamentoSpesa" @bind-Value="context.TipoPagamento" Margin="Margin.Dense" Disabled="@(!IsEditable)">
+                            <MudSelectItem Value="TipoPagamentoSpesa.MezzoProprio">Mezzo proprio</MudSelectItem>
+                            <MudSelectItem Value="TipoPagamentoSpesa.MezzoAziendale">Mezzo aziendale</MudSelectItem>
+                        </MudSelect>
+                    </MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                       OnClick="@(() => model.Righe.Remove(context))" Disabled="@(!IsEditable)" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
+
+    <MudStack Row="true" Spacing="2">
+        @if (IsEditable)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveAsync" Disabled="saving">Salva bozza</MudButton>
+        }
+        @if (Id.HasValue && (stato == StatoNotaSpese.Bozza || stato == StatoNotaSpese.Rifiutata))
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Info" StartIcon="@Icons.Material.Filled.Send"
+                       OnClick="InviaAsync" Disabled="saving">Invia per approvazione</MudButton>
+        }
+        @if (Id.HasValue && stato == StatoNotaSpese.Inviata)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.CheckCircle"
+                       OnClick="ApprovaAsync" Disabled="saving">Approva e rimborsa</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Cancel"
+                       OnClick="RifiutaAsync" Disabled="saving">Rifiuta</MudButton>
+        }
+        @if (Id.HasValue && stato == StatoNotaSpese.Rimborsata && movimentoRimborsoId.HasValue)
+        {
+            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.OpenInNew"
+                       OnClick="@(() => Navigation.NavigateTo($"/movimenti/{movimentoRimborsoId}"))">
+                Vai al movimento di rimborso
+            </MudButton>
+        }
+        <MudSpacer />
+        <MudButton Variant="Variant.Text" OnClick='() => Navigation.NavigateTo("/note-spese")'>Indietro</MudButton>
+    </MudStack>
+}
+
+@code {
+    private static readonly CultureInfo IC = new("it-IT");
+
+    [Parameter] public Guid? Id { get; set; }
+
+    private NotaSpeseInput model = new();
+    private StatoNotaSpese stato = StatoNotaSpese.Bozza;
+    private string? motivoRifiuto;
+    private Guid? movimentoRimborsoId;
+    private bool loading;
+    private bool saving;
+
+    private IReadOnlyList<AnagraficaListItemDto> dipendenti = Array.Empty<AnagraficaListItemDto>();
+    private IReadOnlyList<CategoriaDto> categorie = Array.Empty<CategoriaDto>();
+    private IReadOnlyList<ContoFinanziarioListItemDto> conti = Array.Empty<ContoFinanziarioListItemDto>();
+
+    private string Title => Id.HasValue ? "Nota spese" : "Nuova nota spese";
+    private bool IsEditable => stato == StatoNotaSpese.Bozza || stato == StatoNotaSpese.Rifiutata;
+    private decimal TotaleRighe => model.Righe.Sum(r => r.Importo);
+
+    private decimal TotaleRimborso => model.Righe
+        .Where(r => r.TipoPagamento == TipoPagamentoSpesa.MezzoProprio)
+        .Sum(r => r.Importo);
+
+    protected override async Task OnInitializedAsync()
+    {
+        loading = true;
+        try
+        {
+            dipendenti = await Mediator.Send(new ListAnagrafiche(AnagraficaRuoloFilter.Dipendenti, false, null));
+            categorie = await Mediator.Send(new ListCategorie(false));
+            conti = await Mediator.Send(new ListContiFinanziari(false));
+
+            if (Id.HasValue)
+            {
+                var dto = await Mediator.Send(new GetNotaSpese(Id.Value));
+                if (dto is null)
+                {
+                    Snackbar.Add("Nota spese non trovata.", Severity.Error);
+                    Navigation.NavigateTo("/note-spese");
+                    return;
+                }
+
+                stato = dto.Stato;
+                motivoRifiuto = dto.MotivoRifiuto;
+                movimentoRimborsoId = dto.MovimentoRimborsoId;
+                model = new NotaSpeseInput
+                {
+                    DipendenteId = dto.DipendenteId,
+                    Mese = dto.Mese,
+                    Anno = dto.Anno,
+                    Descrizione = dto.Descrizione,
+                    Righe = dto.Righe.Select(r => new RigaSpesaInput
+                    {
+                        Data = r.Data,
+                        Descrizione = r.Descrizione,
+                        Importo = r.Importo,
+                        CategoriaId = r.CategoriaId,
+                        TipoPagamento = r.TipoPagamento,
+                    }).ToList(),
+                };
+            }
+            else
+            {
+                model.Anno = Esercizio.Anno;
+                model.Mese = DateTime.UtcNow.Month;
+            }
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void AddRiga() => model.Righe.Add(new RigaSpesaInput { Data = DateOnly.FromDateTime(DateTime.UtcNow) });
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        try
+        {
+            if (Id.HasValue)
+            {
+                await Mediator.Send(new UpdateNotaSpese(Id.Value, model));
+                Snackbar.Add("Nota spese aggiornata.", Severity.Success);
+            }
+            else
+            {
+                var newId = await Mediator.Send(new CreateNotaSpese(model));
+                Snackbar.Add("Nota spese creata.", Severity.Success);
+                Navigation.NavigateTo($"/note-spese/{newId}");
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Errore: {ex.Message}", Severity.Error); }
+        finally { saving = false; }
+    }
+
+    private async Task InviaAsync()
+    {
+        if (!Id.HasValue) return;
+        try
+        {
+            await Mediator.Send(new InviaNotaSpese(Id.Value));
+            Snackbar.Add("Nota spese inviata per approvazione.", Severity.Success);
+            stato = StatoNotaSpese.Inviata;
+        }
+        catch (Exception ex) { Snackbar.Add($"Errore: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ApprovaAsync()
+    {
+        if (!Id.HasValue) return;
+
+        Guid contoId;
+        if (conti.Count == 1)
+        {
+            contoId = conti[0].Id;
+        }
+        else
+        {
+            var confirmed = await Dialog.ShowMessageBox(
+                "Approva e genera rimborso",
+                $"Verrà generato un movimento di rimborso di {TotaleRimborso:N2} €. Confermi?",
+                yesText: "Approva", cancelText: "Annulla");
+            if (confirmed != true) return;
+            contoId = conti.FirstOrDefault()?.Id ?? Guid.Empty;
+        }
+
+        try
+        {
+            await Mediator.Send(new ApprovaNotaSpese(Id.Value, contoId));
+            Snackbar.Add("Nota spese approvata e rimborso generato.", Severity.Success);
+            Navigation.NavigateTo($"/note-spese/{Id.Value}", forceLoad: true);
+        }
+        catch (Exception ex) { Snackbar.Add($"Errore: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task RifiutaAsync()
+    {
+        if (!Id.HasValue) return;
+        var confirmed = await Dialog.ShowMessageBox(
+            "Rifiuta nota spese",
+            "Vuoi rifiutare questa nota spese?",
+            yesText: "Rifiuta", cancelText: "Annulla");
+        if (confirmed != true) return;
+        var motivo = "Nota spese rifiutata";
+
+        try
+        {
+            await Mediator.Send(new RifiutaNotaSpese(Id.Value, motivo));
+            Snackbar.Add("Nota spese rifiutata.", Severity.Info);
+            stato = StatoNotaSpese.Rifiutata;
+            motivoRifiuto = motivo;
+        }
+        catch (Exception ex) { Snackbar.Add($"Errore: {ex.Message}", Severity.Error); }
+    }
+
+    private static Color StatoColor(StatoNotaSpese s) => s switch
+    {
+        StatoNotaSpese.Bozza => Color.Default,
+        StatoNotaSpese.Inviata => Color.Info,
+        StatoNotaSpese.Approvata => Color.Success,
+        StatoNotaSpese.Rifiutata => Color.Error,
+        StatoNotaSpese.Rimborsata => Color.Tertiary,
+        _ => Color.Default,
+    };
+
+    private static DateTime? DateOnlyToDate(DateOnly d) => d.ToDateTime(TimeOnly.MinValue);
+}

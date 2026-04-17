@@ -65,6 +65,7 @@ try
 
     app.MapAccountEndpoints();
     app.MapExportEndpoints();
+    app.MapEsercizioEndpoints();
 
     app.UseHangfireDashboard("/hangfire", new DashboardOptions
     {

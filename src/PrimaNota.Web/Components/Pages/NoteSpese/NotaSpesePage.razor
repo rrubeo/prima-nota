@@ -1,0 +1,117 @@
+@page "/note-spese"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireAuthenticated)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.NoteSpese
+@using PrimaNota.Domain.NoteSpese
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Note spese · Prima Nota</PageTitle>
+
+<div class="d-flex align-center mb-4 gap-3">
+    <MudText Typo="Typo.h4">Note spese</MudText>
+    <MudSpacer />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick='() => Navigation.NavigateTo("/note-spese/nuova")'>
+        Nuova nota spese
+    </MudButton>
+</div>
+
+<MudPaper Class="pa-4 mb-4" Elevation="0">
+    <MudGrid>
+        <MudItem xs="6" sm="3">
+            <MudSelect T="StatoNotaSpese?" Label="Stato" @bind-Value="statoFilter" @bind-Value:after="ReloadAsync" Clearable="true">
+                <MudSelectItem T="StatoNotaSpese?" Value="@((StatoNotaSpese?)null)">Tutti</MudSelectItem>
+                @foreach (var s in Enum.GetValues<StatoNotaSpese>())
+                {
+                    <MudSelectItem T="StatoNotaSpese?" Value="@((StatoNotaSpese?)s)">@s</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (items.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">Nessuna nota spese.</MudAlert>
+}
+else
+{
+    <MudTable Items="items" Dense="true" Hover="true" Striped="true" Class="pn-table-compact"
+              Breakpoint="Breakpoint.None">
+        <HeaderContent>
+            <MudTh Style="white-space:nowrap">Dipendente</MudTh>
+            <MudTh Style="width:90px; white-space:nowrap">Periodo</MudTh>
+            <MudTh Style="white-space:nowrap">Descrizione</MudTh>
+            <MudTh Style="width:100px; text-align:right; white-space:nowrap">Totale</MudTh>
+            <MudTh Style="width:100px; text-align:right; white-space:nowrap">Rimborso</MudTh>
+            <MudTh Style="width:60px; text-align:center; white-space:nowrap">Righe</MudTh>
+            <MudTh Style="width:110px; white-space:nowrap">Stato</MudTh>
+            <MudTh Style="width:50px"></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.DipendenteNome</MudTd>
+            <MudTd>@($"{context.Mese:00}/{context.Anno}")</MudTd>
+            <MudTd>@context.Descrizione</MudTd>
+            <MudTd Style="text-align:right; font-family:monospace; white-space:nowrap">@context.Totale.ToString("N2", IC) €</MudTd>
+            <MudTd Style="text-align:right; font-family:monospace; white-space:nowrap">@context.TotaleRimborso.ToString("N2", IC) €</MudTd>
+            <MudTd Style="text-align:center">@context.NumeroRighe</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@StatoColor(context.Stato)" Variant="Variant.Filled">
+                    @context.Stato
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => Navigation.NavigateTo($"/note-spese/{context.Id}"))" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+<style>
+    .pn-table-compact .mud-table-cell,
+    .pn-table-compact .mud-table-head .mud-table-cell { font-size: 0.8125rem; padding-top: 4px; padding-bottom: 4px; }
+</style>
+
+@code {
+    private static readonly CultureInfo IC = new("it-IT");
+
+    private bool loading = true;
+    private StatoNotaSpese? statoFilter;
+    private IReadOnlyList<NotaSpeseListItemDto> items = Array.Empty<NotaSpeseListItemDto>();
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        loading = true;
+        try
+        {
+            items = await Mediator.Send(new ListNoteSpese(Esercizio.Anno, Stato: statoFilter));
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private static Color StatoColor(StatoNotaSpese s) => s switch
+    {
+        StatoNotaSpese.Bozza => Color.Default,
+        StatoNotaSpese.Inviata => Color.Info,
+        StatoNotaSpese.Approvata => Color.Success,
+        StatoNotaSpese.Rifiutata => Color.Error,
+        StatoNotaSpese.Rimborsata => Color.Tertiary,
+        _ => Color.Default,
+    };
+}
