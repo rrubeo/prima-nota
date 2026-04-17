@@ -18,18 +18,16 @@
                     <span class="pn-brand-name">Prima Nota</span>
                 </div>
 
-                <MudSpacer />
-
-                <div class="pn-search">
-                    <MudTextField T="string"
-                                  @bind-Value="searchText"
-                                  Placeholder="Cerca..."
-                                  Variant="Variant.Outlined"
-                                  Margin="Margin.Dense"
-                                  Adornment="Adornment.End"
-                                  AdornmentIcon="@Icons.Material.Filled.Search"
-                                  AdornmentColor="Color.Default"
-                                  Class="pn-search-input" />
+                <div class="pn-year-toolbar ml-4">
+                    <MudSelect T="int" Value="Esercizio.Anno" ValueChanged="OnYearChanged"
+                               Variant="Variant.Outlined" Margin="Margin.Dense"
+                               Dense="true" Class="pn-year-select">
+                        @for (var y = DateTime.UtcNow.Year; y >= DateTime.UtcNow.Year - 10; y--)
+                        {
+                            var val = y;
+                            <MudSelectItem T="int" Value="val">@val</MudSelectItem>
+                        }
+                    </MudSelect>
                 </div>
 
                 <MudSpacer />
@@ -80,17 +78,6 @@
 
             <MudMainContent Class="pn-main">
                 <MudContainer MaxWidth="MaxWidth.False" Class="pn-container pa-8">
-                    <div class="pn-year-selector">
-                        <MudSelect T="int" Value="Esercizio.Anno" ValueChanged="OnYearChanged"
-                                   Variant="Variant.Outlined" Margin="Margin.Dense"
-                                   Label="Esercizio" Dense="true" Style="width:140px">
-                            @for (var y = DateTime.UtcNow.Year; y >= DateTime.UtcNow.Year - 10; y--)
-                            {
-                                var val = y;
-                                <MudSelectItem T="int" Value="val">@val</MudSelectItem>
-                            }
-                        </MudSelect>
-                    </div>
                     @Body
                 </MudContainer>
             </MudMainContent>
@@ -137,23 +124,12 @@
         font-weight: 600;
         letter-spacing: .02em;
     }
-    .pn-search {
-        flex: 1;
-        display: flex;
-        justify-content: center;
-        max-width: 42rem;
-        padding: 0 1rem;
-    }
-    .pn-search-input {
-        width: 100%;
-    }
-    .pn-search-input .mud-input-outlined-border { border-color: transparent !important; }
-    .pn-search-input .mud-input-slot {
-        background: #ffffff !important;
-        border-radius: 8px !important;
-    }
-    .pn-search-input input { color: #111827 !important; }
-    .pn-search-input .mud-input-adornment .mud-icon-default { color: #9ca3af !important; }
+    .pn-year-toolbar { display: flex; align-items: center; }
+    .pn-year-select { width: 100px; }
+    .pn-year-select .mud-input-outlined-border { border-color: rgba(255,255,255,0.3) !important; }
+    .pn-year-select .mud-input-slot { color: #fff !important; }
+    .pn-year-select .mud-select-input { color: #fff !important; font-weight: 600; }
+    .pn-year-select .mud-input-adornment .mud-icon-default { color: rgba(255,255,255,0.7) !important; }
 
     .pn-profile-menu .mud-button-root {
         text-transform: none !important;
@@ -178,16 +154,10 @@
     .pn-container {
         position: relative;
     }
-    .pn-year-selector {
-        position: absolute;
-        right: 2rem;
-        top: 1.5rem;
-    }
 </style>
 
 @code {
     private bool drawerOpen = true;
-    private string? searchText;
 
     private void OnYearChanged(int anno)
     {

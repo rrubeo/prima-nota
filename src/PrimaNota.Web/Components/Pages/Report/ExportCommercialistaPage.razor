@@ -1,0 +1,125 @@
+@page "/report/export-commercialista"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.Esercizi
+@using PrimaNota.Application.Iva
+@using PrimaNota.Domain.Iva
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Export commercialista · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Export per il commercialista</MudText>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Scarica i report dell'esercizio in formato Excel. Il pacchetto completo include
+    prima nota, registri IVA e liquidazioni di tutti i periodi.
+</MudText>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="0" Outlined="true">
+                <MudCardContent>
+                    <MudIcon Icon="@Icons.Material.Filled.Archive" Size="Size.Large" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6" Class="mt-2">Pacchetto completo</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        ZIP con prima nota, registri IVA (vendite + acquisti) e liquidazione per ogni periodo dell'anno @Esercizio.Anno.
+                    </MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Download"
+                               Href="@PacchettoUrl" Target="_blank">
+                        Scarica ZIP
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="0" Outlined="true">
+                <MudCardContent>
+                    <MudIcon Icon="@Icons.Material.Filled.List" Size="Size.Large" Color="Color.Info" />
+                    <MudText Typo="Typo.h6" Class="mt-2">Prima nota</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Elenco completo dei movimenti dell'esercizio @Esercizio.Anno con causale, anagrafica, importo, stato e residuo.
+                    </MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Download"
+                               Href="@($"/api/export/movimenti/{Esercizio.Anno}")" Target="_blank">
+                        Scarica Excel
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="4">
+            <MudCard Elevation="0" Outlined="true">
+                <MudCardContent>
+                    <MudIcon Icon="@Icons.Material.Filled.TableView" Size="Size.Large" Color="Color.Secondary" />
+                    <MudText Typo="Typo.h6" Class="mt-2">Registri IVA</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Scarica un singolo registro IVA per il periodo selezionato.
+                    </MudText>
+                    <MudSelect T="TipoRegistroIva" @bind-Value="registroTipo" Label="Registro" Class="mt-2" Dense="true">
+                        <MudSelectItem Value="TipoRegistroIva.Vendite">Vendite</MudSelectItem>
+                        <MudSelectItem Value="TipoRegistroIva.Acquisti">Acquisti</MudSelectItem>
+                        <MudSelectItem Value="TipoRegistroIva.Corrispettivi">Corrispettivi</MudSelectItem>
+                    </MudSelect>
+                    <MudSelect T="int" @bind-Value="periodoIndice" Label="Periodo" Dense="true">
+                        @foreach (var p in Periodi)
+                        {
+                            <MudSelectItem Value="@p.Indice">@p.Label</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Download"
+                               Href="@RegistroUrl" Target="_blank">
+                        Scarica Excel
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool loading = true;
+    private PeriodicitaIva periodicita = PeriodicitaIva.Trimestrale;
+    private TipoRegistroIva registroTipo = TipoRegistroIva.Vendite;
+    private int periodoIndice = 1;
+
+    private IReadOnlyList<IvaPeriodo> Periodi => IvaPeriodo.Elenco(Esercizio.Anno, periodicita).ToList();
+
+    private string PacchettoUrl => $"/api/export/commercialista/{Esercizio.Anno}/{periodicita}";
+
+    private string RegistroUrl => $"/api/export/registro-iva/{registroTipo}/{Esercizio.Anno}/{periodicita}/{periodoIndice}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var config = await Mediator.Send(new GetEsercizioIvaConfig(Esercizio.Anno));
+            if (config is not null)
+            {
+                periodicita = config.Periodicita;
+            }
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

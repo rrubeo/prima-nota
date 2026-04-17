@@ -13,6 +13,7 @@ using PrimaNota.Infrastructure.Configuration;
 using PrimaNota.Infrastructure.Esercizi;
 using PrimaNota.Infrastructure.Identity;
 using PrimaNota.Infrastructure.Persistence;
+using PrimaNota.Infrastructure.Reporting;
 using PrimaNota.Infrastructure.Storage;
 using PrimaNota.Shared.Clock;
 
@@ -52,6 +53,7 @@ public static class DependencyInjection
 
         services.AddSingleton<IAttachmentStorage, FileSystemAttachmentStorage>();
         services.AddSingleton<IEstratoContoParser, PdfEstratoContoParser>();
+        services.AddSingleton<IExcelExporter, ClosedXmlExcelExporter>();
 
         services.AddHttpContextAccessor();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();

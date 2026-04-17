@@ -8,6 +8,7 @@ using PrimaNota.Infrastructure.Esercizi;
 using PrimaNota.Web.Authentication;
 using PrimaNota.Web.BackgroundJobs;
 using PrimaNota.Web.Components;
+using PrimaNota.Web.Endpoints;
 using Serilog;
 using Serilog.Exceptions;
 
@@ -63,6 +64,7 @@ try
         .AddInteractiveServerRenderMode();
 
     app.MapAccountEndpoints();
+    app.MapExportEndpoints();
 
     app.UseHangfireDashboard("/hangfire", new DashboardOptions
     {
