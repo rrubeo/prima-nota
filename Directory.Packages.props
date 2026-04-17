@@ -51,6 +51,10 @@
     <PackageVersion Include="AspNetCore.HealthChecks.SqlServer" Version="9.0.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Pdf">
+    <PackageVersion Include="PdfPig" Version="0.1.14" />
+  </ItemGroup>
+
   <ItemGroup Label="ApplicationLayer">
     <PackageVersion Include="MediatR" Version="12.4.1" />
     <PackageVersion Include="FluentValidation" Version="11.11.0" />

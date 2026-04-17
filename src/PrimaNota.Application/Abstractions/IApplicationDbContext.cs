@@ -44,6 +44,9 @@ public interface IApplicationDbContext
     /// <summary>Gets the <see cref="ConfigurazioneAzienda"/> singleton set.</summary>
     DbSet<ConfigurazioneAzienda> ConfigurazioneAzienda { get; }
 
+    /// <summary>Gets the <see cref="EstratoContoImport"/> set.</summary>
+    DbSet<EstratoContoImport> EstrattiConto { get; }
+
     /// <summary>Persists pending changes to the underlying store.</summary>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The number of state entries written.</returns>

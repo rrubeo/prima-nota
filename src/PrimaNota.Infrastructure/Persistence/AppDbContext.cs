@@ -51,6 +51,9 @@ public sealed class AppDbContext
     /// <summary>Gets the <see cref="Domain.Azienda.ConfigurazioneAzienda"/> singleton set.</summary>
     public DbSet<ConfigurazioneAzienda> ConfigurazioneAzienda => Set<ConfigurazioneAzienda>();
 
+    /// <summary>Gets the <see cref="EstratoContoImport"/> set.</summary>
+    public DbSet<EstratoContoImport> EstrattiConto => Set<EstratoContoImport>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder builder)
     {

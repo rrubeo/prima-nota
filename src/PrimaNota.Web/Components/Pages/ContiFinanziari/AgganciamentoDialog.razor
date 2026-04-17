@@ -1,0 +1,231 @@
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.ContiFinanziari
+@using PrimaNota.Application.Iva
+@using PrimaNota.Application.PianoConti
+@using PrimaNota.Application.Anagrafiche
+@using PrimaNota.Application.PrimaNota
+@using PrimaNota.Domain.PianoConti
+@using PrimaNota.Domain.PrimaNota
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudTabs @bind-ActivePanelIndex="tabIndex">
+            <MudTabPanel Text="Aggancia a esistente">
+                <MudTextField T="string" Label="Cerca movimento (descrizione, numero)"
+                              @bind-Value="searchText" @bind-Value:after="SearchMovimentiAsync"
+                              Clearable="true" Class="mb-3" />
+                @if (searchResults.Count > 0)
+                {
+                    <MudList T="MovimentoListItemDto" Dense="true" Style="max-height:300px; overflow-y:auto">
+                        @foreach (var m in searchResults)
+                        {
+                            <MudListItem T="MovimentoListItemDto" OnClick="@(() => SelectMovimento(m))">
+                                <div class="d-flex justify-space-between align-center w-100">
+                                    <div>
+                                        <MudText Typo="Typo.body2">@m.Data.ToString("dd/MM/yyyy") — @m.Descrizione</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@m.CausaleCodice · @m.AnagraficaRagioneSociale</MudText>
+                                    </div>
+                                    <MudText Typo="Typo.body2" Style="font-family:monospace; white-space:nowrap"
+                                             Class="@(m.Totale < 0 ? "mud-error-text" : "mud-success-text")">
+                                        @m.Totale.ToString("N2", IC) €
+                                    </MudText>
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+                @if (selectedMovimentoId.HasValue)
+                {
+                    <MudAlert Severity="Severity.Info" Class="mt-2">
+                        Movimento selezionato: @selectedMovimentoDescrizione
+                    </MudAlert>
+                }
+            </MudTabPanel>
+            <MudTabPanel Text="Genera nuovo">
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Guid" @bind-Value="causaleId" Label="Causale" Required="true">
+                            @foreach (var c in causali)
+                            {
+                                <MudSelectItem T="Guid" Value="@c.Id">@c.Codice — @c.Nome</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Guid" @bind-Value="categoriaId" Label="Categoria" Required="true">
+                            @foreach (var c in categorie)
+                            {
+                                <MudSelectItem T="Guid" Value="@c.Id">@c.Codice — @c.Nome</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Guid?" @bind-Value="anagraficaId" Label="Anagrafica" Clearable="true">
+                            <MudSelectItem T="Guid?" Value="@((Guid?)null)">— nessuna —</MudSelectItem>
+                            @foreach (var a in anagrafiche)
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.RagioneSociale</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Guid?" @bind-Value="aliquotaIvaId" Label="Aliquota IVA" Clearable="true">
+                            <MudSelectItem T="Guid?" Value="@((Guid?)null)">— nessuna —</MudSelectItem>
+                            @foreach (var a in aliquote)
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.Codice — @a.Descrizione</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    @if (IsGiroconto)
+                    {
+                        <MudItem xs="12">
+                            <MudSelect T="Guid?" @bind-Value="contoDestinazioneId" Label="Conto destinazione (giroconto)" Required="true">
+                                @foreach (var c in conti.Where(c => c.Id != ContoFinanziarioId))
+                                {
+                                    <MudSelectItem T="Guid?" Value="@((Guid?)c.Id)">@c.Codice — @c.Nome</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudAlert Severity="Severity.Info" Dense="true">
+                                Giroconto: verrà creato un movimento con due righe bilanciate
+                                (@Riga?.Importo.ToString("N2", IC) € sul conto origine,
+                                @(-(Riga?.Importo ?? 0)).ToString("N2", IC) € sul conto destinazione).
+                            </MudAlert>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudTabPanel>
+        </MudTabs>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ConfirmAsync" Disabled="saving">
+            @(tabIndex == 0 ? "Aggancia" : "Genera e riconcilia")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly CultureInfo IC = new("it-IT");
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Guid ImportId { get; set; }
+
+    [Parameter] public RigaEstratoContoDto? Riga { get; set; }
+
+    [Parameter] public Guid ContoFinanziarioId { get; set; }
+
+    private int tabIndex;
+    private bool saving;
+
+    private string? searchText;
+    private IReadOnlyList<MovimentoListItemDto> searchResults = Array.Empty<MovimentoListItemDto>();
+    private Guid? selectedMovimentoId;
+    private string? selectedMovimentoDescrizione;
+
+    private Guid causaleId;
+    private Guid categoriaId;
+    private Guid? anagraficaId;
+    private Guid? aliquotaIvaId;
+    private Guid? contoDestinazioneId;
+
+    private IReadOnlyList<CausaleDto> causali = Array.Empty<CausaleDto>();
+    private IReadOnlyList<CategoriaDto> categorie = Array.Empty<CategoriaDto>();
+    private IReadOnlyList<ContoFinanziarioListItemDto> conti = Array.Empty<ContoFinanziarioListItemDto>();
+    private IReadOnlyList<AnagraficaListItemDto> anagrafiche = Array.Empty<AnagraficaListItemDto>();
+    private IReadOnlyList<AliquotaIvaDto> aliquote = Array.Empty<AliquotaIvaDto>();
+
+    private bool IsGiroconto => causali.FirstOrDefault(c => c.Id == causaleId)?.Tipo == TipoMovimento.GirocontoInterno;
+
+    protected override async Task OnInitializedAsync()
+    {
+        causali = await Mediator.Send(new ListCausali(false));
+        categorie = await Mediator.Send(new ListCategorie(false));
+        conti = await Mediator.Send(new ListContiFinanziari(false));
+        anagrafiche = await Mediator.Send(new Application.Anagrafiche.ListAnagrafiche(
+            Application.Anagrafiche.AnagraficaRuoloFilter.Tutti, false, null));
+        aliquote = await Mediator.Send(new ListAliquoteIva(false));
+    }
+
+    private async Task SearchMovimentiAsync()
+    {
+        if (string.IsNullOrWhiteSpace(searchText) && Riga is not null)
+        {
+            searchResults = await Mediator.Send(new ListMovimenti(
+                Esercizio.Anno,
+                Cerca: null,
+                DateFrom: Riga.DataContabile.AddDays(-30),
+                DateTo: Riga.DataContabile.AddDays(30)));
+        }
+        else
+        {
+            searchResults = await Mediator.Send(new ListMovimenti(
+                Esercizio.Anno,
+                Cerca: searchText));
+        }
+    }
+
+    private void SelectMovimento(MovimentoListItemDto m)
+    {
+        selectedMovimentoId = m.Id;
+        selectedMovimentoDescrizione = $"{m.Data:dd/MM/yyyy} — {m.Descrizione} ({m.Totale:N2} €)";
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task ConfirmAsync()
+    {
+        saving = true;
+        try
+        {
+            if (tabIndex == 0)
+            {
+                if (!selectedMovimentoId.HasValue)
+                {
+                    Snackbar.Add("Seleziona un movimento.", Severity.Warning);
+                    return;
+                }
+
+                await Mediator.Send(new RiconciliaRiga(ImportId, Riga!.Id, selectedMovimentoId.Value));
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                if (causaleId == Guid.Empty || categoriaId == Guid.Empty)
+                {
+                    Snackbar.Add("Causale e categoria obbligatorie.", Severity.Warning);
+                    return;
+                }
+
+                var movId = await Mediator.Send(new GeneraMovimentoDaRiga(
+                    ImportId,
+                    Riga!.Id,
+                    causaleId,
+                    categoriaId,
+                    ContoFinanziarioId,
+                    anagraficaId,
+                    aliquotaIvaId,
+                    IsGiroconto ? contoDestinazioneId : null));
+
+                Snackbar.Add($"Movimento generato e riconciliato.", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(movId));
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

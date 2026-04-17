@@ -8,6 +8,7 @@ public sealed record MovimentoListItemDto(
     DateOnly Data,
     string Descrizione,
     string? Numero,
+    Guid CausaleId,
     string CausaleCodice,
     string CausaleNome,
     string? AnagraficaRagioneSociale,

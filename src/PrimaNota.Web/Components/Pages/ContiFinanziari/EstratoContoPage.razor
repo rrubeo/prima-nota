@@ -1,0 +1,275 @@
+@page "/estratto-conto"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.ContiFinanziari
+@using PrimaNota.Domain.ContiFinanziari
+@inject IMediator Mediator
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject NavigationManager Navigation
+
+<PageTitle>Estratto conto · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Import estratto conto</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="0">
+    <MudGrid>
+        <MudItem xs="12" sm="5">
+            <MudSelect T="Guid?" @bind-Value="contoFilterId" Label="Conto finanziario"
+                       Clearable="true" ToStringFunc="@FormatConto">
+                <MudSelectItem T="Guid?" Value="@((Guid?)null)">Tutti</MudSelectItem>
+                @foreach (var c in conti)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)c.Id)">@c.Codice — @c.Nome</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudSelect T="Guid" @bind-Value="uploadContoId" Label="Importa per conto" ToStringFunc="@FormatConto">
+                @foreach (var c in conti)
+                {
+                    <MudSelectItem T="Guid" Value="@c.Id">@c.Codice — @c.Nome</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="3" Class="d-flex align-end gap-2">
+            <MudFileUpload T="IBrowserFile"
+                           OnFilesChanged="OnFileSelected"
+                           Accept=".pdf"
+                           Hidden="false"
+                           MaximumFileCount="1"
+                           Disabled="@(uploading || uploadContoId == Guid.Empty)">
+                <ActivatorContent>
+                    <MudButton HtmlTag="label"
+                               Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.UploadFile"
+                               Disabled="@(uploading || uploadContoId == Guid.Empty)">
+                        Carica PDF
+                    </MudButton>
+                </ActivatorContent>
+            </MudFileUpload>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (imports.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">Nessun estratto conto importato.</MudAlert>
+}
+else
+{
+    <MudTable Items="imports" Dense="true" Hover="true" Striped="true" Class="pn-table-compact">
+        <HeaderContent>
+            <MudTh Style="white-space:nowrap">Data import</MudTh>
+            <MudTh Style="white-space:nowrap">Conto</MudTh>
+            <MudTh Style="white-space:nowrap">File</MudTh>
+            <MudTh Style="white-space:nowrap">Periodo</MudTh>
+            <MudTh Style="white-space:nowrap; text-align:right">Saldo</MudTh>
+            <MudTh Style="white-space:nowrap; text-align:center">Righe</MudTh>
+            <MudTh Style="white-space:nowrap; text-align:center">Da riconc.</MudTh>
+            <MudTh Style="width:100px"></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.ImportedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm", ItCulture)</MudTd>
+            <MudTd>@context.ContoNome</MudTd>
+            <MudTd>@context.NomeFile</MudTd>
+            <MudTd>@context.PeriodoDa.ToString("dd/MM/yyyy") — @context.PeriodoA.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd Style="text-align:right; font-family:monospace">@(context.SaldoContabile?.ToString("N2", ItCulture) ?? "—")</MudTd>
+            <MudTd Style="text-align:center">@context.TotaleRighe</MudTd>
+            <MudTd Style="text-align:center">
+                @if (context.RigheDaRiconciliare > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">@context.RigheDaRiconciliare</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">0</MudChip>
+                }
+            </MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
+                               Color="Color.Primary" OnClick="@(() => ViewDetail(context.Id))" />
+                <MudIconButton Icon="@Icons.Material.Filled.CompareArrows" Size="Size.Small"
+                               Color="Color.Secondary"
+                               OnClick="@(() => Navigation.NavigateTo($"/riconciliazione/{context.Id}"))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                               Color="Color.Error" OnClick="@(() => DeleteAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@if (selectedImportId.HasValue && detailRows.Count > 0)
+{
+    <MudPaper Class="pa-4 mt-4" Elevation="0">
+        <MudText Typo="Typo.h6" GutterBottom="true">Righe estratto conto</MudText>
+        <MudTable Items="detailRows" Dense="true" Hover="true" Striped="true" Class="pn-table-compact"
+                  Breakpoint="Breakpoint.None">
+            <HeaderContent>
+                <MudTh Style="width:90px; white-space:nowrap">Data cont.</MudTh>
+                <MudTh Style="width:90px; white-space:nowrap">Data val.</MudTh>
+                <MudTh Style="width:70px; white-space:nowrap">Causale</MudTh>
+                <MudTh Style="white-space:nowrap">Operazione</MudTh>
+                <MudTh Style="white-space:nowrap">Descrizione</MudTh>
+                <MudTh Style="width:120px; text-align:right; white-space:nowrap">Importo</MudTh>
+                <MudTh Style="width:100px; white-space:nowrap">Stato</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.DataContabile.ToString("dd/MM/yyyy")</MudTd>
+                <MudTd>@context.DataValuta.ToString("dd/MM/yyyy")</MudTd>
+                <MudTd>@context.CausaleOperazione</MudTd>
+                <MudTd>@context.Operazione</MudTd>
+                <MudTd>@context.Descrizione</MudTd>
+                <MudTd Style="text-align:right; font-family:monospace; white-space:nowrap"
+                       class="@(context.Importo < 0 ? "mud-error-text" : "mud-success-text")">
+                    @context.Importo.ToString("N2", ItCulture) €
+                </MudTd>
+                <MudTd>
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@StatoColor(context.Stato)"
+                             Variant="Variant.Filled">
+                        @StatoLabel(context.Stato)
+                    </MudChip>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+}
+
+<style>
+    .pn-table-compact .mud-table-cell,
+    .pn-table-compact .mud-table-head .mud-table-cell { font-size: 0.8125rem; padding-top: 4px; padding-bottom: 4px; }
+</style>
+
+@code {
+    private static readonly CultureInfo ItCulture = new("it-IT");
+
+    private bool loading = true;
+    private bool uploading;
+    private Guid? contoFilterId;
+    private Guid uploadContoId;
+    private Guid? selectedImportId;
+
+    private IReadOnlyList<ContoFinanziarioListItemDto> conti = Array.Empty<ContoFinanziarioListItemDto>();
+    private IReadOnlyList<EstratoContoImportDto> imports = Array.Empty<EstratoContoImportDto>();
+    private IReadOnlyList<RigaEstratoContoDto> detailRows = Array.Empty<RigaEstratoContoDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        conti = await Mediator.Send(new ListContiFinanziari(false));
+        if (conti.Count > 0)
+        {
+            uploadContoId = conti[0].Id;
+        }
+
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        loading = true;
+        try
+        {
+            imports = await Mediator.Send(new ListEstrattiConto(contoFilterId));
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null)
+        {
+            return;
+        }
+
+        uploading = true;
+        try
+        {
+            await using var stream = file.OpenReadStream(50L * 1024 * 1024);
+
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            ms.Position = 0;
+
+            var importId = await Mediator.Send(new ImportEstrattoConto(uploadContoId, file.Name, ms));
+            Snackbar.Add("Estratto conto importato.", Severity.Success);
+            await ReloadAsync();
+            await ViewDetail(importId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            uploading = false;
+        }
+    }
+
+    private async Task ViewDetail(Guid importId)
+    {
+        selectedImportId = importId;
+        detailRows = await Mediator.Send(new GetRigheEstrattoConto(importId));
+    }
+
+    private async Task DeleteAsync(EstratoContoImportDto item)
+    {
+        var confirmed = await Dialog.ShowMessageBox(
+            "Conferma eliminazione",
+            $"Eliminare l'import '{item.NomeFile}' ({item.TotaleRighe} righe)?",
+            yesText: "Elimina", cancelText: "Annulla");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await Mediator.Send(new DeleteEstrattoConto(item.Id));
+        Snackbar.Add("Import eliminato.", Severity.Info);
+        if (selectedImportId == item.Id)
+        {
+            selectedImportId = null;
+            detailRows = Array.Empty<RigaEstratoContoDto>();
+        }
+
+        await ReloadAsync();
+    }
+
+    private string FormatConto(Guid? id)
+    {
+        if (!id.HasValue)
+        {
+            return string.Empty;
+        }
+
+        var c = conti.FirstOrDefault(x => x.Id == id.Value);
+        return c is null ? string.Empty : $"{c.Codice} — {c.Nome}";
+    }
+
+    private string FormatConto(Guid id) => FormatConto((Guid?)id);
+
+    private static Color StatoColor(StatoRiconciliazione stato) => stato switch
+    {
+        StatoRiconciliazione.DaRiconciliare => Color.Warning,
+        StatoRiconciliazione.Riconciliato => Color.Success,
+        StatoRiconciliazione.Escluso => Color.Default,
+        _ => Color.Default,
+    };
+
+    private static string StatoLabel(StatoRiconciliazione stato) => stato switch
+    {
+        StatoRiconciliazione.DaRiconciliare => "Da riconc.",
+        StatoRiconciliazione.Riconciliato => "Riconciliato",
+        StatoRiconciliazione.Escluso => "Escluso",
+        _ => stato.ToString(),
+    };
+}

@@ -1,0 +1,223 @@
+@page "/fatture"
+@page "/fatture/{Tipo}"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.Anagrafiche
+@using PrimaNota.Application.PrimaNota
+@using PrimaNota.Application.PianoConti
+@using PrimaNota.Domain.PianoConti
+@using PrimaNota.Domain.PrimaNota
+@using PrimaNota.Web.Components.Pages.Movimenti
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+@inject NavigationManager Navigation
+@inject IDialogService Dialog
+@inject ISnackbar Snackbar
+
+<PageTitle>Fatture @TabLabel · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Fatture</MudText>
+
+<MudTabs ActivePanelIndex="tabIndex" ActivePanelIndexChanged="OnTabChanged" Elevation="0" ApplyEffectsToContainer="true" Class="mb-4">
+    <MudTabPanel Text="Attive (vendite)" />
+    <MudTabPanel Text="Passive (acquisti)" />
+</MudTabs>
+
+<MudPaper Class="pa-4 mb-4" Elevation="0">
+    <MudGrid>
+        <MudItem xs="12" sm="4">
+            <MudTextField T="string" Label="Cerca (descrizione, numero, anagrafica)"
+                          @bind-Value="cerca" @bind-Value:after="ReloadAsync"
+                          Clearable="true" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" />
+        </MudItem>
+        <MudItem xs="6" sm="2">
+            <MudDatePicker Label="Dal" Date="@DateOnlyToDate(dateFrom)"
+                           DateChanged="d => { dateFrom = DateToDateOnly(d); _ = ReloadAsync(); }" />
+        </MudItem>
+        <MudItem xs="6" sm="2">
+            <MudDatePicker Label="Al" Date="@DateOnlyToDate(dateTo)"
+                           DateChanged="d => { dateTo = DateToDateOnly(d); _ = ReloadAsync(); }" />
+        </MudItem>
+        <MudItem xs="12" sm="4" Class="d-flex align-center justify-end gap-2">
+            <MudTooltip Text="Importa fattura elettronica XML">
+                <MudIconButton Icon="@Icons.Material.Filled.UploadFile"
+                               Color="Color.Default" OnClick="OpenImportXmlAsync" />
+            </MudTooltip>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="NuovaFattura">
+                Nuova fattura
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (items.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">Nessuna fattura @TabLabel.ToLowerInvariant() per i filtri selezionati.</MudAlert>
+}
+else
+{
+    <MudTable Items="items" Dense="true" Hover="true" Striped="true" Class="pn-table-compact"
+              Breakpoint="Breakpoint.None">
+        <HeaderContent>
+            <MudTh Style="width:90px; white-space:nowrap">Data</MudTh>
+            <MudTh Style="width:100px; white-space:nowrap">Numero</MudTh>
+            <MudTh Style="white-space:nowrap">Anagrafica</MudTh>
+            <MudTh Style="white-space:nowrap">Descrizione</MudTh>
+            <MudTh Style="width:120px; text-align:right; white-space:nowrap">Importo</MudTh>
+            <MudTh Style="width:120px; text-align:right; white-space:nowrap">Residuo</MudTh>
+            <MudTh Style="width:100px; white-space:nowrap">Pagamento</MudTh>
+            <MudTh Style="width:100px; white-space:nowrap">Stato</MudTh>
+            <MudTh Style="width:50px"></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.Data.ToString("dd/MM/yyyy", IC)</MudTd>
+            <MudTd>@context.Numero</MudTd>
+            <MudTd>@context.AnagraficaRagioneSociale</MudTd>
+            <MudTd Style="max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+                @context.Descrizione
+            </MudTd>
+            <MudTd Style="text-align:right; font-family:monospace; white-space:nowrap"
+                   class="@(context.Totale < 0 ? "mud-error-text" : "mud-success-text")">
+                @context.Totale.ToString("N2", IC) €
+            </MudTd>
+            <MudTd Style="text-align:right; font-family:monospace; white-space:nowrap">
+                @if (context.Residuo > 0.01m)
+                {
+                    <span class="mud-warning-text">@context.Residuo.ToString("N2", IC) €</span>
+                }
+                else
+                {
+                    <span class="mud-success-text">0,00 €</span>
+                }
+            </MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small"
+                         Color="@(context.IsFullyPaid ? Color.Success : Color.Warning)"
+                         Variant="Variant.Filled">
+                    @(context.IsFullyPaid ? "Saldato" : "Da saldare")
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small"
+                         Color="@StatoColor(context.Stato)" Variant="Variant.Filled">
+                    @context.Stato
+                </MudChip>
+            </MudTd>
+            <MudTd>
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                               Color="Color.Primary"
+                               OnClick="@(() => Navigation.NavigateTo($"/movimenti/{context.Id}"))" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+<style>
+    .pn-table-compact .mud-table-cell,
+    .pn-table-compact .mud-table-head .mud-table-cell { font-size: 0.8125rem; padding-top: 4px; padding-bottom: 4px; }
+</style>
+
+@code {
+    private static readonly CultureInfo IC = new("it-IT");
+
+    [Parameter] public string? Tipo { get; set; }
+
+    private int tabIndex;
+    private bool loading;
+    private string? cerca;
+    private DateOnly? dateFrom;
+    private DateOnly? dateTo;
+
+    private IReadOnlyList<MovimentoListItemDto> items = Array.Empty<MovimentoListItemDto>();
+    private IReadOnlyList<CausaleDto> causaliAttive = Array.Empty<CausaleDto>();
+    private IReadOnlyList<CausaleDto> causaliPassive = Array.Empty<CausaleDto>();
+
+    private bool IsAttive => tabIndex == 0;
+
+    private string TabLabel => IsAttive ? "Attive" : "Passive";
+
+    protected override async Task OnInitializedAsync()
+    {
+        tabIndex = string.Equals(Tipo, "passive", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+
+        var allCausali = await Mediator.Send(new ListCausali(false));
+        causaliAttive = allCausali.Where(c => c.Tipo == TipoMovimento.Incasso && c.Fonte == FonteCausale.Fattura).ToList();
+        causaliPassive = allCausali.Where(c => c.Tipo == TipoMovimento.Pagamento).ToList();
+
+        await ReloadAsync();
+    }
+
+    private async Task OnTabChanged(int idx)
+    {
+        tabIndex = idx;
+        Navigation.NavigateTo(IsAttive ? "/fatture" : "/fatture/passive", replace: true);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        loading = true;
+        try
+        {
+            var causaleIds = IsAttive
+                ? causaliAttive.Select(c => c.Id).ToList()
+                : causaliPassive.Select(c => c.Id).ToList();
+
+            if (causaleIds.Count == 0)
+            {
+                items = Array.Empty<MovimentoListItemDto>();
+                return;
+            }
+
+            var all = await Mediator.Send(new ListMovimenti(
+                Esercizio.Anno,
+                Cerca: cerca,
+                DateFrom: dateFrom,
+                DateTo: dateTo));
+
+            items = all.Where(m => causaleIds.Contains(m.CausaleId)).ToList();
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void NuovaFattura()
+    {
+        Navigation.NavigateTo("/movimenti/nuovo");
+    }
+
+    private async Task OpenImportXmlAsync()
+    {
+        var dlg = await Dialog.ShowAsync<ImportFatturaDialog>(
+            "Importa fattura elettronica",
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var outcome = await dlg.Result;
+        if (outcome is { Canceled: false, Data: Guid movimentoId })
+        {
+            Navigation.NavigateTo($"/movimenti/{movimentoId}");
+        }
+    }
+
+    private static Color StatoColor(StatoMovimento stato) => stato switch
+    {
+        StatoMovimento.Draft => Color.Default,
+        StatoMovimento.Confirmed => Color.Info,
+        StatoMovimento.Reconciled => Color.Success,
+        _ => Color.Default,
+    };
+
+    private static DateTime? DateOnlyToDate(DateOnly? d) => d?.ToDateTime(TimeOnly.MinValue);
+
+    private static DateOnly? DateToDateOnly(DateTime? d) => d.HasValue ? DateOnly.FromDateTime(d.Value) : null;
+}

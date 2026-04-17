@@ -76,6 +76,12 @@
           "Microsoft.EntityFrameworkCore.Relational": "10.0.0"
         }
       },
+      "PdfPig": {
+        "type": "Direct",
+        "requested": "[0.1.14, )",
+        "resolved": "0.1.14",
+        "contentHash": "V2Anq0Yvyn3bGGG8WCQxqEAshG0KHIehB0QOotCz14vTkEk1PR3ErPOSmbnEsyOewhdF3G5XpQHywK2L50Xu+A=="
+      },
       "SonarAnalyzer.CSharp": {
         "type": "Direct",
         "requested": "[10.4.0.108396, )",

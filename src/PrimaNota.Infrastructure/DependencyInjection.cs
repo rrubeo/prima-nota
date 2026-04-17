@@ -7,6 +7,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using PrimaNota.Application.Abstractions;
 using PrimaNota.Application.Esercizi;
 using PrimaNota.Infrastructure.Audit;
+using PrimaNota.Infrastructure.BankStatements;
 using PrimaNota.Infrastructure.Clock;
 using PrimaNota.Infrastructure.Configuration;
 using PrimaNota.Infrastructure.Esercizi;
@@ -50,6 +51,7 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.AddSingleton<IAttachmentStorage, FileSystemAttachmentStorage>();
+        services.AddSingleton<IEstratoContoParser, PdfEstratoContoParser>();
 
         services.AddHttpContextAccessor();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();

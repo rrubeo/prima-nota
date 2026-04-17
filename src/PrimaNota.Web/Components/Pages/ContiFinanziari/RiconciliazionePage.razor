@@ -1,0 +1,283 @@
+@page "/riconciliazione/{ImportId:guid}"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.ContiFinanziari
+@using PrimaNota.Domain.ContiFinanziari
+@inject IMediator Mediator
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject NavigationManager Navigation
+
+<PageTitle>Riconciliazione · Prima Nota</PageTitle>
+
+<div class="d-flex align-center gap-3 mb-3">
+    <MudText Typo="Typo.h4">Riconciliazione</MudText>
+    @if (importInfo is not null)
+    {
+        <MudText Typo="Typo.body1" Class="mud-text-secondary">
+            @importInfo.ContoNome · @importInfo.PeriodoDa.ToString("dd/MM/yyyy") — @importInfo.PeriodoA.ToString("dd/MM/yyyy")
+        </MudText>
+        <MudChip T="string" Size="Size.Small" Color="@(importInfo.RigheDaRiconciliare > 0 ? Color.Warning : Color.Success)">
+            @importInfo.RigheDaRiconciliare da riconciliare
+        </MudChip>
+    }
+    <MudSpacer />
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AutoFixHigh"
+               OnClick="FindMatchesAsync" Disabled="searching">
+        Cerca match automatici
+    </MudButton>
+    <MudButton Variant="Variant.Text" OnClick='() => Navigation.NavigateTo("/estratto-conto")'>
+        Indietro
+    </MudButton>
+</div>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    @if (candidates.Count > 0)
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="0">
+            <MudText Typo="Typo.h6" GutterBottom="true">Match proposti (@candidates.Count)</MudText>
+            <MudTable Items="candidates" Dense="true" Hover="true" Striped="true" Class="pn-table-compact"
+                      Breakpoint="Breakpoint.None">
+                <HeaderContent>
+                    <MudTh Style="width:90px; white-space:nowrap">Data banca</MudTh>
+                    <MudTh Style="width:110px; text-align:right; white-space:nowrap">Importo</MudTh>
+                    <MudTh Style="white-space:nowrap">Descrizione banca</MudTh>
+                    <MudTh Style="width:90px; white-space:nowrap">Data mov.</MudTh>
+                    <MudTh Style="white-space:nowrap">Movimento</MudTh>
+                    <MudTh Style="white-space:nowrap">Anagrafica</MudTh>
+                    <MudTh Style="width:80px; white-space:nowrap">Match</MudTh>
+                    <MudTh Style="width:130px"></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.RigaDataContabile.ToString("dd/MM/yyyy")</MudTd>
+                    <MudTd Style="text-align:right; font-family:monospace; white-space:nowrap"
+                           class="@(context.RigaImporto < 0 ? "mud-error-text" : "mud-success-text")">
+                        @context.RigaImporto.ToString("N2", IC) €
+                    </MudTd>
+                    <MudTd Style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+                        @context.RigaDescrizione
+                    </MudTd>
+                    <MudTd>@context.MovimentoData.ToString("dd/MM/yyyy")</MudTd>
+                    <MudTd>
+                        <MudLink Href="@($"/movimenti/{context.MovimentoId}")">
+                            @context.MovimentoDescrizione
+                        </MudLink>
+                    </MudTd>
+                    <MudTd>@context.MovimentoAnagrafica</MudTd>
+                    <MudTd>
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@(context.Confidence >= 1m ? Color.Success : context.Confidence >= 0.8m ? Color.Info : Color.Warning)">
+                            @((context.Confidence * 100).ToString("0"))%
+                        </MudChip>
+                    </MudTd>
+                    <MudTd>
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                   OnClick="@(() => ConfirmMatchAsync(context))">
+                            Riconcilia
+                        </MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    }
+
+    <MudPaper Class="pa-4 mb-4" Elevation="0">
+        <MudText Typo="Typo.h6" GutterBottom="true">Righe estratto conto</MudText>
+        <MudTable Items="rows" Dense="true" Hover="true" Striped="true" Class="pn-table-compact"
+                  Breakpoint="Breakpoint.None">
+            <HeaderContent>
+                <MudTh Style="width:90px; white-space:nowrap">Data cont.</MudTh>
+                <MudTh Style="width:70px; white-space:nowrap">Causale</MudTh>
+                <MudTh Style="white-space:nowrap">Operazione</MudTh>
+                <MudTh Style="white-space:nowrap">Descrizione</MudTh>
+                <MudTh Style="width:120px; text-align:right; white-space:nowrap">Importo</MudTh>
+                <MudTh Style="width:110px; white-space:nowrap">Stato</MudTh>
+                <MudTh Style="width:100px"></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.DataContabile.ToString("dd/MM/yyyy")</MudTd>
+                <MudTd>@context.CausaleOperazione</MudTd>
+                <MudTd>@context.Operazione</MudTd>
+                <MudTd Style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+                    @context.Descrizione
+                </MudTd>
+                <MudTd Style="text-align:right; font-family:monospace; white-space:nowrap"
+                       class="@(context.Importo < 0 ? "mud-error-text" : "mud-success-text")">
+                    @context.Importo.ToString("N2", IC) €
+                </MudTd>
+                <MudTd>
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@StatoColor(context.Stato)" Variant="Variant.Filled">
+                        @StatoLabel(context.Stato)
+                    </MudChip>
+                </MudTd>
+                <MudTd>
+                    @if (context.Stato == StatoRiconciliazione.DaRiconciliare)
+                    {
+                        <MudTooltip Text="Aggancia o genera movimento">
+                            <MudIconButton Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small"
+                                           Color="Color.Primary"
+                                           OnClick="@(() => OpenAgganciamentoAsync(context))" />
+                        </MudTooltip>
+                        <MudIconButton Icon="@Icons.Material.Filled.Block" Size="Size.Small"
+                                       Color="Color.Default"
+                                       OnClick="@(() => EscludiAsync(context))" />
+                    }
+                    @if (context.Stato != StatoRiconciliazione.DaRiconciliare)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small"
+                                       Color="Color.Warning"
+                                       OnClick="@(() => ResetAsync(context))" />
+                    }
+                    @if (context.Stato == StatoRiconciliazione.Riconciliato && context.MovimentoId.HasValue)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small"
+                                       Color="Color.Primary"
+                                       OnClick="@(() => Navigation.NavigateTo($"/movimenti/{context.MovimentoId}"))" />
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+}
+
+<style>
+    .pn-table-compact .mud-table-cell,
+    .pn-table-compact .mud-table-head .mud-table-cell { font-size: 0.8125rem; padding-top: 4px; padding-bottom: 4px; }
+</style>
+
+@code {
+    private static readonly CultureInfo IC = new("it-IT");
+
+    [Parameter] public Guid ImportId { get; set; }
+
+    private bool loading = true;
+    private bool searching;
+    private EstratoContoImportDto? importInfo;
+    private IReadOnlyList<RigaEstratoContoDto> rows = Array.Empty<RigaEstratoContoDto>();
+    private IReadOnlyList<MatchCandidateDto> candidates = Array.Empty<MatchCandidateDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        loading = true;
+        try
+        {
+            var imports = await Mediator.Send(new ListEstrattiConto());
+            importInfo = imports.FirstOrDefault(i => i.Id == ImportId);
+
+            rows = await Mediator.Send(new GetRigheEstrattoConto(ImportId));
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task FindMatchesAsync()
+    {
+        if (importInfo is null)
+        {
+            return;
+        }
+
+        searching = true;
+        try
+        {
+            candidates = await Mediator.Send(new FindMatchCandidates(ImportId, importInfo.ContoFinanziarioId));
+            if (candidates.Count == 0)
+            {
+                Snackbar.Add("Nessun match trovato.", Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add($"{candidates.Count} match proposti.", Severity.Success);
+            }
+        }
+        finally
+        {
+            searching = false;
+        }
+    }
+
+    private async Task ConfirmMatchAsync(MatchCandidateDto match)
+    {
+        try
+        {
+            await Mediator.Send(new RiconciliaRiga(ImportId, match.RigaId, match.MovimentoId));
+            Snackbar.Add("Riga riconciliata.", Severity.Success);
+            candidates = candidates.Where(c => c.RigaId != match.RigaId).ToList();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OpenAgganciamentoAsync(RigaEstratoContoDto riga)
+    {
+        if (importInfo is null)
+        {
+            return;
+        }
+
+        var parameters = new DialogParameters<AgganciamentoDialog>
+        {
+            { x => x.ImportId, ImportId },
+            { x => x.Riga, riga },
+            { x => x.ContoFinanziarioId, importInfo.ContoFinanziarioId },
+        };
+
+        var dlg = await Dialog.ShowAsync<AgganciamentoDialog>(
+            $"Riga {riga.DataContabile:dd/MM/yyyy} — {riga.Importo:N2} €",
+            parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true });
+
+        var result = await dlg.Result;
+        if (result is { Canceled: false })
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private async Task EscludiAsync(RigaEstratoContoDto riga)
+    {
+        await Mediator.Send(new EscludiRiga(ImportId, riga.Id));
+        Snackbar.Add("Riga esclusa.", Severity.Info);
+        await ReloadAsync();
+    }
+
+    private async Task ResetAsync(RigaEstratoContoDto riga)
+    {
+        await Mediator.Send(new ResetRiconciliazione(ImportId, riga.Id));
+        Snackbar.Add("Riconciliazione annullata.", Severity.Info);
+        await ReloadAsync();
+    }
+
+    private static Color StatoColor(StatoRiconciliazione stato) => stato switch
+    {
+        StatoRiconciliazione.DaRiconciliare => Color.Warning,
+        StatoRiconciliazione.Riconciliato => Color.Success,
+        StatoRiconciliazione.Escluso => Color.Default,
+        _ => Color.Default,
+    };
+
+    private static string StatoLabel(StatoRiconciliazione stato) => stato switch
+    {
+        StatoRiconciliazione.DaRiconciliare => "Da riconc.",
+        StatoRiconciliazione.Riconciliato => "Riconciliato",
+        StatoRiconciliazione.Escluso => "Escluso",
+        _ => stato.ToString(),
+    };
+}
