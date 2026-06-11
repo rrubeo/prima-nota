@@ -65,19 +65,34 @@ else
             <MudText Typo="Typo.body2" Class="mud-text-secondary mr-3">
                 Totale: @TotaleRighe.ToString("N2", IC) € · Rimborso: @TotaleRimborso.ToString("N2", IC) €
             </MudText>
-            <MudFileUpload T="IBrowserFile" OnFilesChanged="OnReceiptSelected"
-                           Accept=".jpg,.jpeg,.png,.webp,.heic"
-                           Hidden="true" MaximumFileCount="1" Disabled="@(!IsEditable || scanning)">
-                <ActivatorContent>
-                    <MudButton HtmlTag="label" Variant="Variant.Outlined" Color="Color.Secondary"
-                               StartIcon="@Icons.Material.Filled.CameraAlt"
-                               Disabled="@(!IsEditable || scanning)">
-                        @(scanning ? "Analisi in corso..." : "Scansiona scontrino")
-                    </MudButton>
-                </ActivatorContent>
-            </MudFileUpload>
             <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="AddRiga" Disabled="@(!IsEditable)">Aggiungi</MudButton>
         </div>
+
+        @if (IsEditable)
+        {
+            <MudFileUpload T="IBrowserFile" OnFilesChanged="OnReceiptSelected"
+                           Accept=".jpg,.jpeg,.png,.webp,.heic"
+                           MaximumFileCount="1" Disabled="@scanning"
+                           Class="mb-3">
+                <ActivatorContent>
+                    <MudPaper Outlined="true" Class="pn-drop-zone d-flex flex-column align-center justify-center pa-4"
+                              Style="@(scanning ? "opacity:0.5" : "")">
+                        @if (scanning)
+                        {
+                            <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mb-2" />
+                            <MudText Typo="Typo.body2">Analisi scontrino in corso...</MudText>
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CameraAlt" Size="Size.Large" Class="mud-text-secondary mb-1" />
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                Trascina qui una foto dello scontrino oppure <strong>clicca per selezionare</strong>
+                            </MudText>
+                        }
+                    </MudPaper>
+                </ActivatorContent>
+            </MudFileUpload>
+        }
 
         @if (model.Righe.Count == 0)
         {
@@ -87,21 +102,22 @@ else
         {
             <MudTable Items="model.Righe" Dense="true" Hover="true" Breakpoint="Breakpoint.None">
                 <HeaderContent>
-                    <MudTh Style="width:120px">Data</MudTh>
+                    <MudTh Style="width:150px; white-space:nowrap">Data</MudTh>
                     <MudTh>Descrizione</MudTh>
-                    <MudTh Style="width:120px">Importo €</MudTh>
+                    <MudTh Style="width:110px; white-space:nowrap">Importo €</MudTh>
                     <MudTh>Categoria</MudTh>
-                    <MudTh Style="width:150px">Pagamento</MudTh>
+                    <MudTh Style="width:160px; white-space:nowrap">Pagamento</MudTh>
                     <MudTh Style="width:40px"></MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>
                         <MudDatePicker Date="@DateOnlyToDate(context.Data)"
                                        DateChanged="@(d => { if (d.HasValue) context.Data = DateOnly.FromDateTime(d.Value); })"
-                                       Disabled="@(!IsEditable)" Margin="Margin.Dense" />
+                                       Disabled="@(!IsEditable)" Margin="Margin.Dense"
+                                       DateFormat="dd/MM/yyyy" Editable="true" />
                     </MudTd>
                     <MudTd><MudTextField @bind-Value="context.Descrizione" Margin="Margin.Dense" Disabled="@(!IsEditable)" /></MudTd>
-                    <MudTd><MudNumericField T="decimal" @bind-Value="context.Importo" HideSpinButtons="true" Disabled="@(!IsEditable)" Margin="Margin.Dense" /></MudTd>
+                    <MudTd><MudNumericField T="decimal" @bind-Value="context.Importo" HideSpinButtons="true" Disabled="@(!IsEditable)" Margin="Margin.Dense" Format="N2" Culture="IC" /></MudTd>
                     <MudTd>
                         <MudSelect T="Guid" @bind-Value="context.CategoriaId" Margin="Margin.Dense" Disabled="@(!IsEditable)">
                             @foreach (var c in categorie)
@@ -154,6 +170,20 @@ else
         <MudButton Variant="Variant.Text" OnClick='() => Navigation.NavigateTo("/note-spese")'>Indietro</MudButton>
     </MudStack>
 }
+
+<style>
+    .pn-drop-zone {
+        border: 2px dashed #d1d5db;
+        border-radius: 12px;
+        min-height: 80px;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+    }
+    .pn-drop-zone:hover {
+        border-color: #6366f1;
+        background: #f5f3ff;
+    }
+</style>
 
 @code {
     private static readonly CultureInfo IC = new("it-IT");
