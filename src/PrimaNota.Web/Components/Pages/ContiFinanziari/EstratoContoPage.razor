@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
 @using System.Globalization
 @using MediatR
+@using PrimaNota.Application.Abstractions
 @using PrimaNota.Application.ContiFinanziari
 @using PrimaNota.Domain.ContiFinanziari
 @inject IMediator Mediator
@@ -15,7 +16,7 @@
 
 <MudPaper Class="pa-4 mb-4" Elevation="0">
     <MudGrid>
-        <MudItem xs="12" sm="5">
+        <MudItem xs="12" sm="4">
             <MudSelect T="Guid?" @bind-Value="contoFilterId" Label="Conto finanziario"
                        Clearable="true" ToStringFunc="@FormatConto">
                 <MudSelectItem T="Guid?" Value="@((Guid?)null)">Tutti</MudSelectItem>
@@ -25,7 +26,7 @@
                 }
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" sm="4">
+        <MudItem xs="12" sm="3">
             <MudSelect T="Guid" @bind-Value="uploadContoId" Label="Importa per conto" ToStringFunc="@FormatConto">
                 @foreach (var c in conti)
                 {
@@ -33,10 +34,20 @@
                 }
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" sm="3" Class="d-flex align-end gap-2">
+        <MudItem xs="12" sm="3">
+            <MudSelect T="string" @bind-Value="selectedConnectorId" Label="Istituto"
+                       ToStringFunc="@FormatConnector">
+                <MudSelectItem T="string" Value="@((string?)null)">Auto-rileva</MudSelectItem>
+                @foreach (var conn in connectors)
+                {
+                    <MudSelectItem T="string" Value="@conn.Id">@conn.DisplayName</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="2" Class="d-flex align-end gap-2">
             <MudFileUpload T="IBrowserFile"
                            OnFilesChanged="OnFileSelected"
-                           Accept=".pdf"
+                           Accept=".csv"
                            Hidden="true"
                            MaximumFileCount="1"
                            Disabled="@(uploading || uploadContoId == Guid.Empty)">
@@ -46,7 +57,7 @@
                                Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.UploadFile"
                                Disabled="@(uploading || uploadContoId == Guid.Empty)">
-                        Carica PDF
+                        Carica CSV
                     </MudButton>
                 </ActivatorContent>
             </MudFileUpload>
@@ -155,10 +166,12 @@ else
     private Guid? contoFilterId;
     private Guid uploadContoId;
     private Guid? selectedImportId;
+    private string? selectedConnectorId;
 
     private IReadOnlyList<ContoFinanziarioListItemDto> conti = Array.Empty<ContoFinanziarioListItemDto>();
     private IReadOnlyList<EstratoContoImportDto> imports = Array.Empty<EstratoContoImportDto>();
     private IReadOnlyList<RigaEstratoContoDto> detailRows = Array.Empty<RigaEstratoContoDto>();
+    private IReadOnlyList<BankConnectorInfo> connectors = Array.Empty<BankConnectorInfo>();
 
     protected override async Task OnInitializedAsync()
     {
@@ -167,6 +180,8 @@ else
         {
             uploadContoId = conti[0].Id;
         }
+
+        connectors = await Mediator.Send(new ListBankConnectors());
 
         await ReloadAsync();
     }
@@ -201,7 +216,7 @@ else
             await stream.CopyToAsync(ms);
             ms.Position = 0;
 
-            var importId = await Mediator.Send(new ImportEstrattoConto(uploadContoId, file.Name, ms));
+            var importId = await Mediator.Send(new ImportEstrattoConto(uploadContoId, file.Name, ms, selectedConnectorId));
             Snackbar.Add("Estratto conto importato.", Severity.Success);
             await ReloadAsync();
             await ViewDetail(importId);
@@ -256,6 +271,17 @@ else
     }
 
     private string FormatConto(Guid id) => FormatConto((Guid?)id);
+
+    private string FormatConnector(string? id)
+    {
+        if (string.IsNullOrEmpty(id))
+        {
+            return "Auto-rileva";
+        }
+
+        var conn = connectors.FirstOrDefault(x => x.Id == id);
+        return conn?.DisplayName ?? id;
+    }
 
     private static Color StatoColor(StatoRiconciliazione stato) => stato switch
     {

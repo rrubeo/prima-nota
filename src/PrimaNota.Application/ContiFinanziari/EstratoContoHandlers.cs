@@ -31,11 +31,19 @@ public sealed record RigaEstratoContoDto(
     Guid? MovimentoId,
     Guid? PagamentoId);
 
-/// <summary>Imports a bank statement PDF for a financial account.</summary>
+/// <summary>Imports a bank statement file for a financial account.</summary>
 /// <param name="ContoFinanziarioId">Target account.</param>
 /// <param name="FileName">Original file name.</param>
-/// <param name="Content">PDF stream (caller keeps ownership).</param>
-public sealed record ImportEstrattoConto(Guid ContoFinanziarioId, string FileName, Stream Content) : IRequest<Guid>;
+/// <param name="Content">File stream (caller keeps ownership).</param>
+/// <param name="ConnectorId">Explicit bank connector to use (null = auto-detect).</param>
+public sealed record ImportEstrattoConto(
+    Guid ContoFinanziarioId,
+    string FileName,
+    Stream Content,
+    string? ConnectorId = null) : IRequest<Guid>;
+
+/// <summary>Lists the bank connectors available for import.</summary>
+public sealed record ListBankConnectors : IRequest<IReadOnlyList<BankConnectorInfo>>;
 
 /// <summary>Lists all imports for a given account.</summary>
 /// <param name="ContoFinanziarioId">Account filter (null = all).</param>
@@ -57,7 +65,7 @@ public sealed class ImportEstratoContoHandler : IRequestHandler<ImportEstrattoCo
 
     /// <summary>Initializes a new instance of the <see cref="ImportEstratoContoHandler"/> class.</summary>
     /// <param name="db">DB.</param>
-    /// <param name="parser">PDF parser.</param>
+    /// <param name="parser">Bank-statement parser.</param>
     public ImportEstratoContoHandler(IApplicationDbContext db, IEstratoContoParser parser)
     {
         this.db = db;
@@ -73,7 +81,7 @@ public sealed class ImportEstratoContoHandler : IRequestHandler<ImportEstrattoCo
             .FirstOrDefaultAsync(c => c.Id == request.ContoFinanziarioId, cancellationToken)
             ?? throw new KeyNotFoundException($"Conto finanziario {request.ContoFinanziarioId} non trovato.");
 
-        var result = parser.Parse(request.Content, request.FileName);
+        var result = parser.Parse(request.Content, request.FileName, request.ConnectorId);
 
         var import = new EstratoContoImport(
             conto.Id,
@@ -174,6 +182,23 @@ public sealed class GetRigheEstratoContoHandler : IRequestHandler<GetRigheEstrat
                 r.MovimentoId,
                 r.PagamentoId))
             .ToList();
+    }
+}
+
+/// <summary>Handler for <see cref="ListBankConnectors"/>.</summary>
+public sealed class ListBankConnectorsHandler : IRequestHandler<ListBankConnectors, IReadOnlyList<BankConnectorInfo>>
+{
+    private readonly IEstratoContoParser parser;
+
+    /// <summary>Initializes a new instance of the <see cref="ListBankConnectorsHandler"/> class.</summary>
+    /// <param name="parser">Bank-statement parser.</param>
+    public ListBankConnectorsHandler(IEstratoContoParser parser) => this.parser = parser;
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<BankConnectorInfo>> Handle(ListBankConnectors request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return Task.FromResult(parser.AvailableConnectors);
     }
 }
 

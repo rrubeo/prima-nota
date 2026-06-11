@@ -52,7 +52,6 @@
   </ItemGroup>
 
   <ItemGroup Label="Pdf">
-    <PackageVersion Include="PdfPig" Version="0.1.14" />
     <PackageVersion Include="QuestPDF" Version="2026.2.4" />
   </ItemGroup>
 

@@ -53,7 +53,13 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services.AddSingleton<IAttachmentStorage, FileSystemAttachmentStorage>();
-        services.AddSingleton<IEstratoContoParser, PdfEstratoContoParser>();
+
+        // Bank-statement connectors: one per institute/format. The dispatcher routes a file to the
+        // right connector by explicit selection or content auto-detection. Add a new bank by
+        // registering another IBankStatementConnector here.
+        services.AddSingleton<IBankStatementConnector, BancoPostaCsvConnector>();
+        services.AddSingleton<IEstratoContoParser, EstratoContoParserDispatcher>();
+
         services.AddSingleton<IExcelExporter, ClosedXmlExcelExporter>();
 
         services.AddOptions<OpenAiOptions>()

@@ -99,3 +99,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - UI: `/admin/azienda` (admin-only) form for the singleton company configuration; Amministrazione nav entry added. Movement edit page now has a DataCompetenza IVA datepicker and a Pagamenti / incassi panel (add form + table + residuo chip), forbidden only on Reconciled movements. New `/anagrafiche/{id}/scheda` page with KPI cards (Dare/Avere/Saldo) + chronological ledger rows; a Receipt icon in the anagrafica list opens it directly
 - Extracted the pro-quota Cassa math into the pure helper `LiquidazioneProQuotaCalculator` so the VAT liquidation handler delegates the in-memory computation to a testable unit. 12 new unit tests covering acconti, saldi, multi-aliquote, indetraibile %, over-payment cap and banker's rounding (52 total green)
 - `GetRegistroIva` now switches on `ConfigurazioneAzienda.EsigibilitaIvaPredefinita`. Under **Immediata** the register is still filtered by `DataCompetenza` (unchanged). Under **Cassa** the handler emits one row per (riga × pagamento-in-periodo) with pro-quota imponibile/imposta and `Data = pagamento.Data`; movements without explicit Pagamenti[] (cash sales / corrispettivi registered as a single transaction) fall back to their registration date with full amount. The same fallback is now applied in `GetLiquidazioneIva` so cash-basis movements without Pagamenti contribute correctly to the periodo under Cassa
+
+### Bank-statement import — CSV connectors
+
+- **Connector architecture** for bank-statement import: new `IBankStatementConnector` abstraction (one per institute/format) plus `EstratoContoParserDispatcher` that routes a file to the right connector either by explicit selection (manual override) or by content-based auto-detection. Adding a new bank is a single connector class + one DI registration.
+- `IEstratoContoParser` now exposes `AvailableConnectors` and accepts an optional `connectorId`; new `BankConnectorInfo` record and `ListBankConnectors` query expose the connector list to the UI.
+- `BancoPostaCsvConnector`: parses the Poste Italiane "BancoPosta — Saldo e Movimenti" CSV export. Auto-detected delimiter (tab / semicolon), `it-IT` amounts, BOM-tolerant; columns mapped by header name (resilient to reordering). Period read from `FILTRI DI RICERCA` (fallback to movement date span), balance from `RIEPILOGO`; credit (Accredito) mapped positive, debit (Addebito) negative.
+- UI (`/estratto-conto`): CSV is now the default import format (`Accept=".csv"`, "Carica CSV"); a new **Istituto** selector offers "Auto-rileva" plus the registered connectors and forwards the chosen `ConnectorId`.
+- 10 unit tests covering detection, movement count, period, balance, sign consistency and semicolon-delimiter support.
+
+### Changed
+
+- CSV is now the default (and only) bank-statement import format.
+
+### Removed
+
+- Legacy PDF bank-statement parser (`PdfEstratoContoParser`, `BancoPostaParser`) and the `PdfPig` dependency, superseded by the CSV connector architecture.
