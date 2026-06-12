@@ -37,14 +37,12 @@ jobs:
       - name: Build (Release)
         run: dotnet build PrimaNota.slnx --configuration Release --no-restore
 
-      - name: Publish PrimaNota.Web (framework-dependent, win-x64)
+      - name: Publish PrimaNota.Web (framework-dependent, portable)
         run: >-
           dotnet publish src/PrimaNota.Web/PrimaNota.Web.csproj
           --configuration Release
           --no-build
           --output publish
-          --runtime win-x64
-          --self-contained false
 
       - name: Copy IIS web.config override
         run: cp deploy/iis/web.config publish/web.config
