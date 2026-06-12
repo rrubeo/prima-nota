@@ -44,8 +44,10 @@ jobs:
           --no-build
           --output publish
 
-      - name: Copy IIS web.config override
-        run: cp deploy/iis/web.config publish/web.config
+      - name: Stage IIS web.config (ASPNETCORE_ENVIRONMENT=Production)
+        run: |
+          cp deploy/iis/web.config publish/web.config
+          sed -i 's#\(name="ASPNETCORE_ENVIRONMENT" value="\)[^"]*#\1Production#' publish/web.config
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
