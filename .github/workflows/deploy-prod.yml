@@ -1,17 +1,15 @@
-name: "Build & Deploy · Dev"
+name: "Build & Deploy · Prod"
 
-# Runs after the CI workflow succeeds on main (so we never deploy a red build),
-# or on manual dispatch. Build/publish on a GitHub-hosted runner, then deploy to
-# IIS on the self-hosted runner installed on the dev server (label "dev").
+# Manual-only deploy to production. Identical to the dev workflow except it never
+# runs automatically: an operator triggers it from the Actions tab. Build/publish
+# on a GitHub-hosted runner, then deploy to IIS on the self-hosted runner of the
+# prod server (label "prod"). Environment-scoped variables (environment: prod)
+# resolve the same vars.* names to production values.
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: deploy-dev
+  group: deploy-prod
   cancel-in-progress: false
 
 env:
@@ -23,16 +21,10 @@ jobs:
     name: Build & Publish
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Skip when CI failed; manual dispatch always runs.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          # Build the exact commit CI validated (head_sha); falls back to the
-          # dispatch ref when run manually.
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup .NET (respect global.json)
         uses: actions/setup-dotnet@v4
@@ -60,15 +52,15 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: primanota-web-dev
+          name: primanota-web-prod
           path: publish
           retention-days: 3
 
   deploy:
     name: Deploy to IIS
     needs: build
-    runs-on: [self-hosted, dev]
-    environment: dev
+    runs-on: [self-hosted, prod]
+    environment: prod
     timeout-minutes: 20
     if: github.ref == 'refs/heads/main'
 
@@ -76,7 +68,7 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: primanota-web-dev
+          name: primanota-web-prod
           path: ./publish
 
       - name: Stop IIS site and app pool
