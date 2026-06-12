@@ -1,0 +1,148 @@
+name: Deploy · Dev
+
+# Triggered on every push to main. The build/publish runs on a GitHub-hosted
+# runner; the actual deploy runs on the self-hosted runner installed on the dev
+# server (label "dev"), which has IIS locally.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  publish:
+    name: Build & publish artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET (respect global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore (locked mode)
+        run: dotnet restore PrimaNota.slnx --locked-mode
+
+      - name: Build (Release)
+        run: dotnet build PrimaNota.slnx --configuration Release --no-restore
+
+      - name: Publish PrimaNota.Web (framework-dependent, win-x64)
+        run: >-
+          dotnet publish src/PrimaNota.Web/PrimaNota.Web.csproj
+          --configuration Release
+          --no-build
+          --output publish
+          --runtime win-x64
+          --self-contained false
+
+      - name: Copy IIS web.config override
+        run: cp deploy/iis/web.config publish/web.config
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: primanota-web-dev
+          path: publish
+          retention-days: 7
+
+  deploy:
+    name: Deploy to IIS (dev, self-hosted)
+    needs: publish
+    # Self-hosted runner on the dev server. "self-hosted" is added automatically;
+    # "dev" is the custom label that targets this specific machine.
+    runs-on: [self-hosted, dev]
+    environment: dev
+    timeout-minutes: 20
+
+    steps:
+      - name: Validate deploy configuration
+        shell: pwsh
+        run: |
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace("${{ vars.DEV_SITE_PATH }}")) { $missing += 'DEV_SITE_PATH (IIS physical path, e.g. C:\inetpub\primanota-dev)' }
+          if ([string]::IsNullOrWhiteSpace("${{ vars.DEV_APP_POOL }}"))  { $missing += 'DEV_APP_POOL (IIS application pool name)' }
+          if ([string]::IsNullOrWhiteSpace("${{ vars.DEV_HEALTH_URL }}")) { $missing += 'DEV_HEALTH_URL (e.g. http://localhost/health)' }
+          if ($missing.Count -gt 0) {
+            Write-Error ("Missing required repository/environment variables:`n - " + ($missing -join "`n - "))
+            exit 1
+          }
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: primanota-web-dev
+          path: publish
+
+      - name: Stop IIS application pool
+        shell: pwsh
+        env:
+          APP_POOL: ${{ vars.DEV_APP_POOL }}
+        run: |
+          $appcmd = "$env:windir\system32\inetsrv\appcmd.exe"
+          # Ignore failure if the pool is already stopped.
+          & $appcmd stop apppool /apppool.name:"$env:APP_POOL" 2>$null
+          Write-Host "Stop requested for app pool '$env:APP_POOL'."
+          # Give IIS a moment to release locks on the assemblies.
+          Start-Sleep -Seconds 3
+
+      - name: Sync files to IIS site (preserve env-specific appsettings)
+        shell: pwsh
+        env:
+          SITE_PATH: ${{ vars.DEV_SITE_PATH }}
+        run: |
+          # appsettings.json IS overwritten with the build output.
+          # The server's appsettings.Production.json / appsettings.Staging.json
+          # (which hold environment secrets) are NEVER touched.
+          robocopy publish "$env:SITE_PATH" /E /R:3 /W:5 /NFL /NDL /NJH /NJS /NP `
+            /XF appsettings.Production.json appsettings.Staging.json
+          # robocopy exit codes 0-7 are success; >=8 is a real failure.
+          if ($LASTEXITCODE -ge 8) {
+            Write-Error "robocopy failed with exit code $LASTEXITCODE."
+            exit 1
+          }
+          Write-Host "Files synced (robocopy exit code $LASTEXITCODE)."
+          exit 0
+
+      - name: Start IIS application pool
+        shell: pwsh
+        env:
+          APP_POOL: ${{ vars.DEV_APP_POOL }}
+        run: |
+          $appcmd = "$env:windir\system32\inetsrv\appcmd.exe"
+          & $appcmd start apppool /apppool.name:"$env:APP_POOL"
+          Write-Host "App pool '$env:APP_POOL' started."
+
+      # Schema creation/upgrade runs inside the app at startup
+      # (Program.cs -> InitializeInfrastructureAsync -> Database.MigrateAsync),
+      # so the first request after deploy waits for migrations to finish —
+      # hence the retry loop below.
+      - name: Smoke test /health (post-deploy + auto-migration)
+        shell: pwsh
+        env:
+          HEALTH_URL: ${{ vars.DEV_HEALTH_URL }}
+        run: |
+          for ($i = 1; $i -le 20; $i++) {
+            try {
+              $resp = Invoke-WebRequest -Uri $env:HEALTH_URL -UseBasicParsing -TimeoutSec 15
+              if ($resp.StatusCode -eq 200) {
+                Write-Host "Health OK (attempt $i)"
+                exit 0
+              }
+            } catch {
+              Write-Host "Attempt $i failed: $_"
+            }
+            Start-Sleep -Seconds 6
+          }
+          Write-Error "Health check did not recover within timeout. Check the app pool / Windows Event Log for migration errors."
+          exit 1
