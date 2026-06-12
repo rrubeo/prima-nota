@@ -32,3 +32,21 @@ updates:
     commit-message:
       prefix: "ci"
       include: scope
+
+  # Bumps the SDK version in global.json. Since the SDK is pinned
+  # (rollForward: disable) and NuGet lock files are committed, a bump PR will be
+  # red until the lock files are regenerated: check out the PR branch and run
+  # `dotnet restore PrimaNota.slnx --force-evaluate`, then push to the PR.
+  - package-ecosystem: dotnet-sdk
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/Rome
+    labels:
+      - dependencies
+      - automated
+    commit-message:
+      prefix: "build"
+      include: scope
