@@ -28,14 +28,14 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Build the exact commit CI validated (head_sha); falls back to the
           # dispatch ref when run manually.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup .NET (respect global.json)
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
 
@@ -58,7 +58,7 @@ jobs:
         run: cp deploy/iis/web.config publish/web.config
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: primanota-web-dev
           path: publish
@@ -74,7 +74,7 @@ jobs:
 
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: primanota-web-dev
           path: ./publish
