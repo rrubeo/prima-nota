@@ -48,6 +48,14 @@
             </MudTabPanel>
             <MudTabPanel Text="Genera nuovo">
                 <MudGrid>
+                    @if (suggerimento is not null)
+                    {
+                        <MudItem xs="12">
+                            <MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Filled.AutoAwesome">
+                                Valori suggeriti da una regola memorizzata (usata @suggerimento.UtilizziCount @(suggerimento.UtilizziCount == 1 ? "volta" : "volte")). Puoi modificarli prima di confermare.
+                            </MudAlert>
+                        </MudItem>
+                    }
                     <MudItem xs="12" sm="6">
                         <MudSelect T="Guid" @bind-Value="causaleId" Label="Causale" Required="true">
                             @foreach (var c in causali)
@@ -136,6 +144,7 @@
     private Guid? anagraficaId;
     private Guid? aliquotaIvaId;
     private Guid? contoDestinazioneId;
+    private RegolaSuggeritaDto? suggerimento;
 
     private IReadOnlyList<CausaleDto> causali = Array.Empty<CausaleDto>();
     private IReadOnlyList<CategoriaDto> categorie = Array.Empty<CategoriaDto>();
@@ -153,6 +162,19 @@
         anagrafiche = await Mediator.Send(new Application.Anagrafiche.ListAnagrafiche(
             Application.Anagrafiche.AnagraficaRuoloFilter.Tutti, false, null));
         aliquote = await Mediator.Send(new ListAliquoteIva(false));
+
+        if (Riga is not null)
+        {
+            suggerimento = await Mediator.Send(new GetRegolaSuggerita(ContoFinanziarioId, ImportId, Riga.Id));
+            if (suggerimento is not null)
+            {
+                causaleId = suggerimento.CausaleId;
+                categoriaId = suggerimento.CategoriaId;
+                anagraficaId = suggerimento.AnagraficaId;
+                aliquotaIvaId = suggerimento.AliquotaIvaId;
+                contoDestinazioneId = suggerimento.ContoDestinazioneId;
+            }
+        }
     }
 
     private async Task SearchMovimentiAsync()

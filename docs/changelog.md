@@ -115,3 +115,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - Legacy PDF bank-statement parser (`PdfEstratoContoParser`, `BancoPostaParser`) and the `PdfPig` dependency, superseded by the CSV connector architecture.
+
+### Reconciliation — memorized classification rules
+
+- New `RegolaRiconciliazione` aggregate: when a user generates a movement from a bank-statement row, the chosen classification (causale, categoria, anagrafica, aliquota IVA, conto destinazione) is stored against a deterministic `RegolaSignature` of the row — bank cause code + operation name + a normalized description fragment — scoped per financial account.
+- `RegolaSignature` normalizer strips volatile parts of the description (amounts, dates, IBAN/TRN/distinta codes, month names) so two rows for the same counterparty collapse to one key; recurring fees (whose only variable part is the month) collapse to an empty description key and match on cause + operation alone.
+- On the next matching row, `GeneraMovimentoDaRiga` upserts the rule (latest choice wins, usage counter incremented). New `GetRegolaSuggerita` query returns the memorized classification (exact match, else a generic cause+operation fallback).
+- UI: the "Genera nuovo" tab of the reconciliation dialog pre-fills the fields from the matched rule and shows a "suggested" badge with the usage count; the user always confirms — nothing is registered automatically.
+- Persistence: `RegoleRiconciliazione` table with a unique index on (account + signature); migration `AddRegoleRiconciliazione` + idempotent SQL `014`.
+- 14 unit tests covering the signature normalizer and the suggestion handler (exact match, generic fallback, per-account isolation, no-match).

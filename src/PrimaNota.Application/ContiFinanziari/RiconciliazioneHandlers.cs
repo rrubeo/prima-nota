@@ -74,6 +74,28 @@ public sealed record GeneraMovimentoDaRiga(
     Guid? AliquotaIvaId,
     Guid? ContoDestinazioneId = null) : IRequest<Guid>;
 
+/// <summary>Suggested classification for a bank row, learned from a previous reconciliation.</summary>
+/// <param name="CausaleId">Suggested causale.</param>
+/// <param name="CategoriaId">Suggested category.</param>
+/// <param name="AnagraficaId">Suggested counterparty (optional).</param>
+/// <param name="AliquotaIvaId">Suggested VAT rate (optional).</param>
+/// <param name="ContoDestinazioneId">Suggested destination account for giroconti (optional).</param>
+/// <param name="UtilizziCount">How many times the rule has been reinforced.</param>
+public sealed record RegolaSuggeritaDto(
+    Guid CausaleId,
+    Guid CategoriaId,
+    Guid? AnagraficaId,
+    Guid? AliquotaIvaId,
+    Guid? ContoDestinazioneId,
+    int UtilizziCount);
+
+/// <summary>Returns the memorized classification suggested for a bank row, or null if none.</summary>
+/// <param name="ContoFinanziarioId">Financial account (rule scope).</param>
+/// <param name="ImportId">Import id.</param>
+/// <param name="RigaId">Bank-statement row id.</param>
+public sealed record GetRegolaSuggerita(Guid ContoFinanziarioId, Guid ImportId, Guid RigaId)
+    : IRequest<RegolaSuggeritaDto?>;
+
 /// <summary>Handler for <see cref="FindMatchCandidates"/>.</summary>
 public sealed class FindMatchCandidatesHandler : IRequestHandler<FindMatchCandidates, IReadOnlyList<MatchCandidateDto>>
 {
@@ -335,7 +357,104 @@ public sealed class GeneraMovimentoDaRigaHandler : IRequestHandler<GeneraMovimen
 
         riga.Riconcilia(movimento.Id, null);
 
+        await UpsertRegolaAsync(import.ContoFinanziarioId, riga, request, cancellationToken);
+
         await db.SaveChangesAsync(cancellationToken);
         return movimento.Id;
+    }
+
+    private async Task UpsertRegolaAsync(
+        Guid contoScope,
+        RigaEstrattoConto riga,
+        GeneraMovimentoDaRiga request,
+        CancellationToken cancellationToken)
+    {
+        var signature = RegolaSignature.Compute(riga.CausaleOperazione, riga.Operazione, riga.Descrizione);
+        var contoDestinazione = request.ContoDestinazioneId is { } d && d != Guid.Empty
+            ? request.ContoDestinazioneId
+            : null;
+
+        var regola = await db.RegoleRiconciliazione.FirstOrDefaultAsync(
+            r => r.ContoFinanziarioId == contoScope
+                 && r.CausaleOperazione == signature.CausaleOperazione
+                 && r.Operazione == signature.Operazione
+                 && r.DescrizioneChiave == signature.DescrizioneChiave,
+            cancellationToken);
+
+        if (regola is null)
+        {
+            db.RegoleRiconciliazione.Add(new RegolaRiconciliazione(
+                contoScope,
+                signature,
+                request.CausaleId,
+                request.CategoriaId,
+                request.AnagraficaId,
+                request.AliquotaIvaId,
+                contoDestinazione));
+        }
+        else
+        {
+            regola.Aggiorna(
+                request.CausaleId,
+                request.CategoriaId,
+                request.AnagraficaId,
+                request.AliquotaIvaId,
+                contoDestinazione);
+        }
+    }
+}
+
+/// <summary>Handler for <see cref="GetRegolaSuggerita"/>.</summary>
+public sealed class GetRegolaSuggeritaHandler : IRequestHandler<GetRegolaSuggerita, RegolaSuggeritaDto?>
+{
+    private readonly IApplicationDbContext db;
+
+    /// <summary>Initializes a new instance of the <see cref="GetRegolaSuggeritaHandler"/> class.</summary>
+    /// <param name="db">DB.</param>
+    public GetRegolaSuggeritaHandler(IApplicationDbContext db) => this.db = db;
+
+    /// <inheritdoc />
+    public async Task<RegolaSuggeritaDto?> Handle(GetRegolaSuggerita request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var import = await db.EstrattiConto.AsNoTracking()
+            .Include(e => e.Righe)
+            .FirstOrDefaultAsync(e => e.Id == request.ImportId, cancellationToken);
+
+        var riga = import?.Righe.FirstOrDefault(r => r.Id == request.RigaId);
+        if (riga is null)
+        {
+            return null;
+        }
+
+        var key = RegolaSignature.Compute(riga.CausaleOperazione, riga.Operazione, riga.Descrizione);
+
+        var regole = await db.RegoleRiconciliazione.AsNoTracking()
+            .Where(r => r.ContoFinanziarioId == request.ContoFinanziarioId
+                        && r.CausaleOperazione == key.CausaleOperazione
+                        && r.Operazione == key.Operazione)
+            .ToListAsync(cancellationToken);
+
+        // Prefer an exact description-fragment match; otherwise fall back to a generic
+        // cause+operation rule (empty description key), most-used first.
+        var match = regole.FirstOrDefault(r => r.DescrizioneChiave == key.DescrizioneChiave);
+        if (match is null && key.DescrizioneChiave.Length > 0)
+        {
+            match = regole
+                .Where(r => r.DescrizioneChiave.Length == 0)
+                .OrderByDescending(r => r.UtilizziCount)
+                .FirstOrDefault();
+        }
+
+        return match is null
+            ? null
+            : new RegolaSuggeritaDto(
+                match.CausaleId,
+                match.CategoriaId,
+                match.AnagraficaId,
+                match.AliquotaIvaId,
+                match.ContoDestinazioneId,
+                match.UtilizziCount);
     }
 }

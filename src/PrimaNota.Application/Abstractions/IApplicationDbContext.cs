@@ -48,6 +48,9 @@ public interface IApplicationDbContext
     /// <summary>Gets the <see cref="EstratoContoImport"/> set.</summary>
     DbSet<EstratoContoImport> EstrattiConto { get; }
 
+    /// <summary>Gets the <see cref="RegolaRiconciliazione"/> set.</summary>
+    DbSet<RegolaRiconciliazione> RegoleRiconciliazione { get; }
+
     /// <summary>Gets the <see cref="NotaSpese"/> set.</summary>
     DbSet<NotaSpese> NoteSpese { get; }
 

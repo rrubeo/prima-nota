@@ -55,6 +55,9 @@ public sealed class AppDbContext
     /// <summary>Gets the <see cref="EstratoContoImport"/> set.</summary>
     public DbSet<EstratoContoImport> EstrattiConto => Set<EstratoContoImport>();
 
+    /// <summary>Gets the <see cref="RegolaRiconciliazione"/> set.</summary>
+    public DbSet<RegolaRiconciliazione> RegoleRiconciliazione => Set<RegolaRiconciliazione>();
+
     /// <summary>Gets the <see cref="NotaSpese"/> set.</summary>
     public DbSet<NotaSpese> NoteSpese => Set<NotaSpese>();
 
