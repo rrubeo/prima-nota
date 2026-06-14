@@ -131,3 +131,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Email infrastructure**: new `IEmailSender` abstraction + MailKit-based `SmtpEmailSender` with `SmtpOptions` (Enabled/Host/Port/credentials/From/StartTls) bound from the `Smtp` appsettings section.
 - **Email two-factor authentication**: a per-user toggle in the management page enables 2FA via an email code (enabling also confirms the email so the Email token provider is valid). The login flow now detects `RequiresTwoFactor`, emails a code and routes to a new `/Account/TwoFactor` verification page (with resend); registered the `TwoFactorUserId`/`TwoFactorRememberMe` cookie schemes required by the two-step `SignInManager` flow.
 - 4 unit tests for the SMTP sender configuration/guard logic.
+
+### Electronic invoice import from Aruba
+
+- **Provider-agnostic abstraction** `IFatturaProvider` (list + download) with `ArubaFatturaProvider`, an adapter for the Aruba "Fatturazione Elettronica" REST API v2: OAuth2 password-grant token caching, the API's 2-day date-window limit handled by automatic chunking with throttling (12 req/min cap), pagination, and CAdES (`.p7m`) unwrapping via BouncyCastle. Downloaded XML is fed to the existing `FatturaElettronicaParser`/`ImportFatturaElettronica` pipeline.
+- **Admin config** at `/admin/integrazione-aruba`: enable/disable, username, password (stored encrypted via ASP.NET Core Data Protection through the new `ISecretProtector`), demo/production toggle. New `IntegrazioneAruba` singleton aggregate + table.
+- **Import UI** at `/import-fatture` (Contabile): pick direction (active/passive), date range and account, search remote invoices (with an "already imported" badge), select and bulk-import them.
+- **Dedup**: `MovimentoPrimaNota` gains `IdentificativoSdi` (the SdI id, indexed); `ListFattureRemote` flags already-imported invoices and `ImportFattureRemote` skips them.
+- Persistence: migration `AddIntegrazioneArubaAndIdSdi` + idempotent SQL `015`. Dependencies: MailKit (added earlier) and `BouncyCastle.Cryptography`.
+- 8 unit tests covering the `.p7m`/CAdES extraction and the 2-day date-window splitting.

@@ -85,6 +85,12 @@ public sealed class MovimentoPrimaNota : AuditableEntity<Guid>
     /// <summary>Gets the optional free-form notes.</summary>
     public string? Note { get; private set; }
 
+    /// <summary>
+    /// Gets the SdI identifier of the source electronic invoice when the movement was imported
+    /// from a provider (e.g. Aruba). Used as an idempotency key to avoid duplicate imports.
+    /// </summary>
+    public string? IdentificativoSdi { get; private set; }
+
     /// <summary>Gets the row-version concurrency token.</summary>
     public byte[] RowVersion { get; private set; } = Array.Empty<byte>();
 
@@ -176,6 +182,11 @@ public sealed class MovimentoPrimaNota : AuditableEntity<Guid>
         AnagraficaId = anagraficaId;
         Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
     }
+
+    /// <summary>Tags the movement with the SdI identifier of its source electronic invoice.</summary>
+    /// <param name="identificativoSdi">SdI identifier (provider file id), or null.</param>
+    public void SetIdentificativoSdi(string? identificativoSdi) =>
+        IdentificativoSdi = string.IsNullOrWhiteSpace(identificativoSdi) ? null : identificativoSdi.Trim();
 
     /// <summary>
     /// Sets the VAT competence date explicitly. Used when importing an invoice whose

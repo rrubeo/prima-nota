@@ -1,0 +1,196 @@
+@page "/import-fatture"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireContabile)]
+@using System.Globalization
+@using MediatR
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Application.ContiFinanziari
+@using PrimaNota.Application.Integrazioni
+@using PrimaNota.Application.PrimaNota.Import
+@inject IMediator Mediator
+@inject IEsercizioContext Esercizio
+@inject ISnackbar Snackbar
+
+<PageTitle>Import fatture (Aruba) · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Import fatture da Aruba</MudText>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Scarica le fatture attive (emesse) o passive (ricevute) per il periodo selezionato e importale
+    come movimenti dell'esercizio @Esercizio.Anno. Le fatture già importate sono segnalate.
+</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="0">
+    <MudGrid>
+        <MudItem xs="12" sm="3">
+            <MudSelect T="DirezioneFattura" @bind-Value="direzione" Label="Tipo">
+                <MudSelectItem Value="DirezioneFattura.Passiva">Passive (ricevute)</MudSelectItem>
+                <MudSelectItem Value="DirezioneFattura.Attiva">Attive (emesse)</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="6" sm="2">
+            <MudDatePicker @bind-Date="dataDa" Label="Da" />
+        </MudItem>
+        <MudItem xs="6" sm="2">
+            <MudDatePicker @bind-Date="dataA" Label="A" />
+        </MudItem>
+        <MudItem xs="12" sm="3">
+            <MudSelect T="Guid" @bind-Value="contoId" Label="Conto finanziario">
+                @foreach (var c in conti)
+                {
+                    <MudSelectItem T="Guid" Value="@c.Id">@c.Codice — @c.Nome</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="2" Class="d-flex align-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                       StartIcon="@Icons.Material.Filled.CloudDownload" OnClick="SearchAsync" Disabled="busy">
+                Cerca
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Per i limiti dell'API Aruba la ricerca avviene a finestre di 2 giorni con attesa tra le chiamate:
+        intervalli ampi richiedono più tempo.
+    </MudText>
+</MudPaper>
+
+@if (busy)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+}
+
+@if (searched)
+{
+    @if (fatture.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">Nessuna fattura trovata nel periodo.</MudAlert>
+    }
+    else
+    {
+        <div class="d-flex justify-space-between align-center mb-2">
+            <MudText Typo="Typo.subtitle2">@fatture.Count fatture trovate</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Success"
+                       StartIcon="@Icons.Material.Filled.Download" OnClick="ImportAsync"
+                       Disabled="@(busy || selected.Count == 0 || contoId == Guid.Empty)">
+                Importa selezionate (@selected.Count)
+            </MudButton>
+        </div>
+
+        <MudTable Items="fatture" T="FatturaRemotaDto" MultiSelection="true" @bind-SelectedItems="selected"
+                  Dense="true" Hover="true" Striped="true">
+            <HeaderContent>
+                <MudTh>Numero</MudTh>
+                <MudTh Style="white-space:nowrap">Data</MudTh>
+                <MudTh>Controparte</MudTh>
+                <MudTh>P.IVA</MudTh>
+                <MudTh Style="text-align:center">Stato</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Numero">@context.Numero</MudTd>
+                <MudTd DataLabel="Data">@(context.Data == default ? "—" : context.Data.ToString("dd/MM/yyyy"))</MudTd>
+                <MudTd DataLabel="Controparte">@context.Controparte</MudTd>
+                <MudTd DataLabel="P.IVA">@context.ContropartePartitaIva</MudTd>
+                <MudTd DataLabel="Stato" Style="text-align:center">
+                    @if (context.GiaImportata)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Già importata</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">Da importare</MudChip>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
+
+@code {
+    private static readonly CultureInfo ItCulture = new("it-IT");
+
+    private DirezioneFattura direzione = DirezioneFattura.Passiva;
+    private DateTime? dataDa = DateTime.Today.AddDays(-7);
+    private DateTime? dataA = DateTime.Today;
+    private Guid contoId;
+    private bool busy;
+    private bool searched;
+
+    private IReadOnlyList<ContoFinanziarioListItemDto> conti = Array.Empty<ContoFinanziarioListItemDto>();
+    private IReadOnlyList<FatturaRemotaDto> fatture = Array.Empty<FatturaRemotaDto>();
+    private HashSet<FatturaRemotaDto> selected = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        conti = await Mediator.Send(new ListContiFinanziari(false));
+        if (conti.Count > 0)
+        {
+            contoId = conti[0].Id;
+        }
+    }
+
+    private async Task SearchAsync()
+    {
+        if (dataDa is null || dataA is null)
+        {
+            Snackbar.Add("Seleziona il periodo.", Severity.Warning);
+            return;
+        }
+
+        if (dataA.Value.Date < dataDa.Value.Date)
+        {
+            Snackbar.Add("La data 'A' precede la data 'Da'.", Severity.Warning);
+            return;
+        }
+
+        busy = true;
+        searched = false;
+        selected = new HashSet<FatturaRemotaDto>();
+        try
+        {
+            fatture = await Mediator.Send(new ListFattureRemote(
+                direzione,
+                DateOnly.FromDateTime(dataDa.Value),
+                DateOnly.FromDateTime(dataA.Value)));
+            searched = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore ricerca: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task ImportAsync()
+    {
+        var ids = selected.Where(f => !f.GiaImportata).Select(f => f.Id).ToList();
+        if (ids.Count == 0)
+        {
+            Snackbar.Add("Nessuna fattura nuova selezionata.", Severity.Warning);
+            return;
+        }
+
+        busy = true;
+        try
+        {
+            var result = await Mediator.Send(new ImportFattureRemote(direzione, contoId, Esercizio.Anno, ids));
+            Snackbar.Add($"Importate {result.Importate}, saltate {result.Saltate}.",
+                result.Errori.Count == 0 ? Severity.Success : Severity.Warning);
+            foreach (var err in result.Errori.Take(5))
+            {
+                Snackbar.Add(err, Severity.Error);
+            }
+
+            await SearchAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore import: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+}

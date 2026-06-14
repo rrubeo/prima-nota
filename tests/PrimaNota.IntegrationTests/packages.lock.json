@@ -118,11 +118,6 @@
           "Microsoft.Identity.Client.Extensions.Msal": "4.73.1"
         }
       },
-      "BouncyCastle.Cryptography": {
-        "type": "Transitive",
-        "resolved": "2.6.2",
-        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
-      },
       "ClosedXML.Parser": {
         "type": "Transitive",
         "resolved": "2.0.0",
@@ -593,6 +588,7 @@
         "type": "Project",
         "dependencies": {
           "AspNetCore.HealthChecks.SqlServer": "[9.0.0, )",
+          "BouncyCastle.Cryptography": "[2.6.2, )",
           "ClosedXML": "[0.105.0, )",
           "Hangfire.AspNetCore": "[1.8.21, )",
           "Hangfire.NetCore": "[1.8.21, )",
@@ -620,6 +616,12 @@
           "Microsoft.Data.SqlClient": "5.2.2",
           "Microsoft.Extensions.Diagnostics.HealthChecks": "8.0.11"
         }
+      },
+      "BouncyCastle.Cryptography": {
+        "type": "CentralTransitive",
+        "requested": "[2.6.2, )",
+        "resolved": "2.6.2",
+        "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
       },
       "ClosedXML": {
         "type": "CentralTransitive",

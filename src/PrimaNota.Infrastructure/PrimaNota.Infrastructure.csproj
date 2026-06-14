@@ -16,6 +16,7 @@
     <PackageReference Include="QuestPDF" />
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="MailKit" />
+    <PackageReference Include="BouncyCastle.Cryptography" />
   </ItemGroup>
 
   <ItemGroup>

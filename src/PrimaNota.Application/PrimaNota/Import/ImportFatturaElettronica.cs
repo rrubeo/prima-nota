@@ -38,11 +38,13 @@ public sealed record ImportFatturaResult(
 /// <param name="Direzione">Attiva (emessa) or Passiva (ricevuta).</param>
 /// <param name="ContoFinanziarioId">Financial account that will carry the movement lines.</param>
 /// <param name="EsercizioAnno">Target fiscal year (must match the invoice date).</param>
+/// <param name="IdentificativoSdi">Optional SdI identifier of the source invoice (set on provider imports for dedup).</param>
 public sealed record ImportFatturaElettronica(
     Stream Xml,
     DirezioneFattura Direzione,
     Guid ContoFinanziarioId,
-    int EsercizioAnno) : IRequest<ImportFatturaResult>;
+    int EsercizioAnno,
+    string? IdentificativoSdi = null) : IRequest<ImportFatturaResult>;
 
 /// <summary>Handler for <see cref="ImportFatturaElettronica"/>.</summary>
 public sealed class ImportFatturaElettronicaHandler : IRequestHandler<ImportFatturaElettronica, ImportFatturaResult>
@@ -130,6 +132,7 @@ public sealed class ImportFatturaElettronicaHandler : IRequestHandler<ImportFatt
         }
 
         movimento.ReplaceRighe(righe);
+        movimento.SetIdentificativoSdi(request.IdentificativoSdi);
         db.Movimenti.Add(movimento);
 
         await db.SaveChangesAsync(cancellationToken);

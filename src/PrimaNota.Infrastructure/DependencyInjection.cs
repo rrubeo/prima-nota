@@ -13,6 +13,7 @@ using PrimaNota.Infrastructure.Configuration;
 using PrimaNota.Infrastructure.Email;
 using PrimaNota.Infrastructure.Esercizi;
 using PrimaNota.Infrastructure.Identity;
+using PrimaNota.Infrastructure.Integrazioni;
 using PrimaNota.Infrastructure.Ocr;
 using PrimaNota.Infrastructure.Persistence;
 using PrimaNota.Infrastructure.Reporting;
@@ -71,6 +72,12 @@ public static class DependencyInjection
         services.AddOptions<SmtpOptions>()
             .Bind(configuration.GetSection(SmtpOptions.SectionName));
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
+
+        // Electronic-invoice provider integration (Aruba). Credentials are stored encrypted in the
+        // DB; the provider reads/decrypts them on demand and caches the OAuth token.
+        services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>();
+        services.AddHttpClient("Aruba");
+        services.AddSingleton<IFatturaProvider, ArubaFatturaProvider>();
 
         services.AddHttpContextAccessor();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();

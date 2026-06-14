@@ -1,0 +1,109 @@
+@page "/admin/integrazione-aruba"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireAdmin)]
+@using MediatR
+@using PrimaNota.Application.Integrazioni
+@inject IMediator Mediator
+@inject ISnackbar Snackbar
+
+<PageTitle>Integrazione Aruba · Prima Nota</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Integrazione Aruba — Fatturazione Elettronica</MudText>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Credenziali dell'API Aruba usate per scaricare le fatture attive e passive. La password è
+    salvata cifrata. Le credenziali API vanno abilitate dal pannello Aruba.
+</MudText>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (model is not null)
+{
+    <MudPaper Class="pa-4" Elevation="0" Style="max-width: 720px;">
+        <MudGrid>
+            <MudItem xs="12">
+                <MudSwitch T="bool" @bind-Value="model.Abilitata" Label="Integrazione abilitata" Color="Color.Primary" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="model.Username" Label="Username API" MaxLength="256" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="model.Password" Label="Password API" InputType="InputType.Password"
+                              HelperText="@(hasPassword ? "Password già impostata: lascia vuoto per non modificarla." : "Inserisci la password API.")" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSwitch T="bool" @bind-Value="model.UsaDemo" Label="Usa ambiente demo (test)" Color="Color.Secondary" />
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync" Disabled="saving">
+            Salva
+        </MudButton>
+    </MudPaper>
+}
+
+@code {
+    private bool loading = true;
+    private bool saving;
+    private bool hasPassword;
+    private FormModel? model;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var dto = await Mediator.Send(new GetIntegrazioneAruba());
+            hasPassword = dto.HasPassword;
+            model = new FormModel { Abilitata = dto.Abilitata, Username = dto.Username, UsaDemo = dto.UsaDemo };
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (model is null)
+        {
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            await Mediator.Send(new UpdateIntegrazioneAruba(
+                model.Abilitata,
+                model.Username,
+                string.IsNullOrWhiteSpace(model.Password) ? null : model.Password,
+                model.UsaDemo));
+            Snackbar.Add("Integrazione aggiornata.", Severity.Success);
+            model.Password = null;
+
+            var dto = await Mediator.Send(new GetIntegrazioneAruba());
+            hasPassword = dto.HasPassword;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private sealed class FormModel
+    {
+        public bool Abilitata { get; set; }
+
+        public string? Username { get; set; }
+
+        public string? Password { get; set; }
+
+        public bool UsaDemo { get; set; }
+    }
+}

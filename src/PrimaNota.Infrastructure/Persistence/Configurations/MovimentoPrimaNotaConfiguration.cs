@@ -24,6 +24,7 @@ internal sealed class MovimentoPrimaNotaConfiguration : IEntityTypeConfiguration
         builder.Property(m => m.AnagraficaId);
         builder.Property(m => m.Stato).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(m => m.Note).HasMaxLength(2000);
+        builder.Property(m => m.IdentificativoSdi).HasMaxLength(256);
 
         builder.Property(m => m.RowVersion)
             .IsRowVersion()
@@ -40,6 +41,7 @@ internal sealed class MovimentoPrimaNotaConfiguration : IEntityTypeConfiguration
         builder.HasIndex(m => m.Stato);
         builder.HasIndex(m => m.CausaleId);
         builder.HasIndex(m => m.AnagraficaId);
+        builder.HasIndex(m => m.IdentificativoSdi);
 
         builder.HasOne<Domain.PianoConti.Causale>()
             .WithMany()

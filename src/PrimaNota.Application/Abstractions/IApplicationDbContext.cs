@@ -4,6 +4,7 @@ using PrimaNota.Domain.Anagrafiche;
 using PrimaNota.Domain.Azienda;
 using PrimaNota.Domain.ContiFinanziari;
 using PrimaNota.Domain.Esercizi;
+using PrimaNota.Domain.Integrazioni;
 using PrimaNota.Domain.Iva;
 using PrimaNota.Domain.NoteSpese;
 using PrimaNota.Domain.PianoConti;
@@ -50,6 +51,9 @@ public interface IApplicationDbContext
 
     /// <summary>Gets the <see cref="RegolaRiconciliazione"/> set.</summary>
     DbSet<RegolaRiconciliazione> RegoleRiconciliazione { get; }
+
+    /// <summary>Gets the <see cref="IntegrazioneAruba"/> singleton set.</summary>
+    DbSet<IntegrazioneAruba> IntegrazioniAruba { get; }
 
     /// <summary>Gets the <see cref="NotaSpese"/> set.</summary>
     DbSet<NotaSpese> NoteSpese { get; }
