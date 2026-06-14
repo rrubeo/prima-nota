@@ -124,3 +124,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - UI: the "Genera nuovo" tab of the reconciliation dialog pre-fills the fields from the matched rule and shows a "suggested" badge with the usage count; the user always confirms — nothing is registered automatically.
 - Persistence: `RegoleRiconciliazione` table with a unique index on (account + signature); migration `AddRegoleRiconciliazione` + idempotent SQL `014`.
 - 14 unit tests covering the signature normalizer and the suggestion handler (exact match, generic fallback, per-account isolation, no-match).
+
+### Admin user management + email two-factor authentication
+
+- **User management** page at `/admin/utenti` (Admin only): list users with roles, status, 2FA and last login; create users (name, email, roles, initial password, email auto-confirmed), edit (name, roles, active), reset password, activate/deactivate (with a guard against disabling your own account). Built directly on `UserManager`/`RoleManager`; actions written to the audit log.
+- **Email infrastructure**: new `IEmailSender` abstraction + MailKit-based `SmtpEmailSender` with `SmtpOptions` (Enabled/Host/Port/credentials/From/StartTls) bound from the `Smtp` appsettings section.
+- **Email two-factor authentication**: a per-user toggle in the management page enables 2FA via an email code (enabling also confirms the email so the Email token provider is valid). The login flow now detects `RequiresTwoFactor`, emails a code and routes to a new `/Account/TwoFactor` verification page (with resend); registered the `TwoFactorUserId`/`TwoFactorRememberMe` cookie schemes required by the two-step `SignInManager` flow.
+- 4 unit tests for the SMTP sender configuration/guard logic.

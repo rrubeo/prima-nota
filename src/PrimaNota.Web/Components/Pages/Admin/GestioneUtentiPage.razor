@@ -1,0 +1,359 @@
+@page "/admin/utenti"
+@attribute [Authorize(Policy = AuthorizationPolicies.RequireAdmin)]
+@using System.Globalization
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using PrimaNota.Application.Abstractions
+@using PrimaNota.Domain.Audit
+@using PrimaNota.Infrastructure.Identity
+@using PrimaNota.Shared.Authorization
+@inject UserManager<ApplicationUser> UserManager
+@inject IEmailSender EmailSender
+@inject IDialogService Dialog
+@inject ISnackbar Snackbar
+@inject IAuditLogger Audit
+
+<PageTitle>Utenti · Prima Nota</PageTitle>
+
+<div class="d-flex justify-space-between align-center mb-2">
+    <MudText Typo="Typo.h4">Gestione utenti</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="CreateAsync">
+        Nuovo utente
+    </MudButton>
+</div>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Crea e gestisci gli account, assegna i ruoli e attiva la verifica in due passaggi via email.
+</MudText>
+
+@if (!EmailSender.IsConfigured)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+        Invio email non configurato (sezione <code>Smtp</code> in appsettings): attivando la 2FA gli utenti
+        non riceverebbero il codice di accesso.
+    </MudAlert>
+}
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudTable Items="users" Dense="true" Hover="true" Striped="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Nome</MudTh>
+            <MudTh>Email</MudTh>
+            <MudTh>Ruoli</MudTh>
+            <MudTh Style="text-align:center">Stato</MudTh>
+            <MudTh Style="text-align:center">2FA email</MudTh>
+            <MudTh Style="white-space:nowrap">Ultimo accesso</MudTh>
+            <MudTh Style="width:170px"></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Nome">@context.FullName</MudTd>
+            <MudTd DataLabel="Email">@context.Email</MudTd>
+            <MudTd DataLabel="Ruoli">
+                @foreach (var r in context.Roles)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">@r</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Stato" Style="text-align:center">
+                <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                    @(context.IsActive ? "Attivo" : "Disattivo")
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="2FA email" Style="text-align:center">
+                <MudIcon Icon="@(context.TwoFactorEnabled ? Icons.Material.Filled.Lock : Icons.Material.Outlined.LockOpen)"
+                         Color="@(context.TwoFactorEnabled ? Color.Success : Color.Default)" Size="Size.Small" />
+            </MudTd>
+            <MudTd DataLabel="Ultimo accesso">
+                @(context.LastLoginAt is { } d ? d.ToLocalTime().ToString("dd/MM/yyyy HH:mm", ItCulture) : "—")
+            </MudTd>
+            <MudTd Style="text-align:right; white-space:nowrap">
+                <MudTooltip Text="Modifica">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => EditAsync(context))" />
+                </MudTooltip>
+                <MudTooltip Text="Reimposta password">
+                    <MudIconButton Icon="@Icons.Material.Filled.Password" Size="Size.Small"
+                                   OnClick="@(() => ResetPasswordAsync(context))" />
+                </MudTooltip>
+                <MudTooltip Text="@(context.TwoFactorEnabled ? "Disattiva 2FA" : "Attiva 2FA")">
+                    <MudIconButton Icon="@Icons.Material.Filled.Security" Size="Size.Small"
+                                   Color="@(context.TwoFactorEnabled ? Color.Success : Color.Default)"
+                                   OnClick="@(() => ToggleTwoFactorAsync(context))" />
+                </MudTooltip>
+                <MudTooltip Text="@(context.IsActive ? "Disattiva" : "Attiva")">
+                    <MudIconButton Icon="@(context.IsActive ? Icons.Material.Filled.Block : Icons.Material.Filled.CheckCircle)"
+                                   Size="Size.Small" Color="@(context.IsActive ? Color.Error : Color.Success)"
+                                   OnClick="@(() => ToggleActiveAsync(context))" />
+                </MudTooltip>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private static readonly CultureInfo ItCulture = new("it-IT");
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private bool loading = true;
+    private string? currentUserId;
+    private IReadOnlyList<UserRow> users = Array.Empty<UserRow>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            currentUserId = state.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        }
+
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        loading = true;
+        try
+        {
+            var entities = await UserManager.Users.OrderBy(u => u.FullName).ToListAsync();
+            var rows = new List<UserRow>(entities.Count);
+            foreach (var u in entities)
+            {
+                var roles = await UserManager.GetRolesAsync(u);
+                rows.Add(new UserRow(u.Id, u.FullName, u.Email ?? string.Empty, u.IsActive, u.TwoFactorEnabled, u.LastLoginAt, roles.ToArray()));
+            }
+
+            users = rows;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        var parameters = new DialogParameters { ["IsNew"] = true };
+        var dialog = await Dialog.ShowAsync<UtenteDialog>("Nuovo utente", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not UtenteDialog.UtenteFormResult form)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(form.FullName) || string.IsNullOrWhiteSpace(form.Email) || string.IsNullOrWhiteSpace(form.Password))
+        {
+            Snackbar.Add("Nome, email e password sono obbligatori.", Severity.Warning);
+            return;
+        }
+
+        var user = new ApplicationUser
+        {
+            UserName = form.Email,
+            Email = form.Email,
+            FullName = form.FullName,
+            IsActive = form.IsActive,
+            EmailConfirmed = true,
+        };
+
+        var created = await UserManager.CreateAsync(user, form.Password!);
+        if (!created.Succeeded)
+        {
+            Snackbar.Add(DescribeErrors(created), Severity.Error);
+            return;
+        }
+
+        if (form.Roles.Count > 0)
+        {
+            await UserManager.AddToRolesAsync(user, form.Roles);
+        }
+
+        await Audit.LogAsync(AuditEventKind.EntityCreated, $"Utente creato: {user.Email}", "ApplicationUser", user.Id);
+        Snackbar.Add("Utente creato.", Severity.Success);
+        await ReloadAsync();
+    }
+
+    private async Task EditAsync(UserRow row)
+    {
+        var parameters = new DialogParameters
+        {
+            ["IsNew"] = false,
+            ["UserId"] = row.Id,
+            ["InitialFullName"] = row.FullName,
+            ["InitialEmail"] = row.Email,
+            ["InitialIsActive"] = row.IsActive,
+            ["InitialRoles"] = (IReadOnlyList<string>)row.Roles,
+        };
+        var dialog = await Dialog.ShowAsync<UtenteDialog>("Modifica utente", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not UtenteDialog.UtenteFormResult form)
+        {
+            return;
+        }
+
+        var user = await UserManager.FindByIdAsync(row.Id);
+        if (user is null)
+        {
+            Snackbar.Add("Utente non trovato.", Severity.Error);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(form.FullName))
+        {
+            Snackbar.Add("Nome obbligatorio.", Severity.Warning);
+            return;
+        }
+
+        user.FullName = form.FullName;
+        user.IsActive = form.IsActive;
+        var update = await UserManager.UpdateAsync(user);
+        if (!update.Succeeded)
+        {
+            Snackbar.Add(DescribeErrors(update), Severity.Error);
+            return;
+        }
+
+        var current = await UserManager.GetRolesAsync(user);
+        var toAdd = form.Roles.Except(current).ToArray();
+        var toRemove = current.Except(form.Roles).ToArray();
+        if (toAdd.Length > 0)
+        {
+            await UserManager.AddToRolesAsync(user, toAdd);
+        }
+
+        if (toRemove.Length > 0)
+        {
+            await UserManager.RemoveFromRolesAsync(user, toRemove);
+        }
+
+        await Audit.LogAsync(AuditEventKind.EntityUpdated, $"Utente aggiornato: {user.Email}", "ApplicationUser", user.Id);
+        Snackbar.Add("Utente aggiornato.", Severity.Success);
+        await ReloadAsync();
+    }
+
+    private async Task ResetPasswordAsync(UserRow row)
+    {
+        var parameters = new DialogParameters { ["Email"] = row.Email };
+        var dialog = await Dialog.ShowAsync<ResetPasswordDialog>("Reimposta password", parameters);
+        var result = await dialog.Result;
+        if (result is null || result.Canceled || result.Data is not string newPassword || string.IsNullOrWhiteSpace(newPassword))
+        {
+            return;
+        }
+
+        var user = await UserManager.FindByIdAsync(row.Id);
+        if (user is null)
+        {
+            return;
+        }
+
+        var token = await UserManager.GeneratePasswordResetTokenAsync(user);
+        var reset = await UserManager.ResetPasswordAsync(user, token, newPassword);
+        if (!reset.Succeeded)
+        {
+            Snackbar.Add(DescribeErrors(reset), Severity.Error);
+            return;
+        }
+
+        await Audit.LogAsync(AuditEventKind.PasswordChanged, $"Password reimpostata per {user.Email}", "ApplicationUser", user.Id);
+        Snackbar.Add("Password reimpostata.", Severity.Success);
+    }
+
+    private async Task ToggleTwoFactorAsync(UserRow row)
+    {
+        var enabling = !row.TwoFactorEnabled;
+        var confirmed = await Dialog.ShowMessageBox(
+            enabling ? "Attiva 2FA" : "Disattiva 2FA",
+            enabling
+                ? $"Attivare la verifica in due passaggi via email per {row.Email}? Al prossimo accesso riceverà un codice via email."
+                : $"Disattivare la 2FA per {row.Email}?",
+            yesText: "Conferma", cancelText: "Annulla");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        var user = await UserManager.FindByIdAsync(row.Id);
+        if (user is null)
+        {
+            return;
+        }
+
+        // Email 2FA requires a confirmed email, otherwise the provider is silently skipped.
+        if (enabling && !user.EmailConfirmed)
+        {
+            user.EmailConfirmed = true;
+            await UserManager.UpdateAsync(user);
+        }
+
+        await UserManager.SetTwoFactorEnabledAsync(user, enabling);
+        await Audit.LogAsync(
+            AuditEventKind.EntityUpdated,
+            $"2FA {(enabling ? "attivata" : "disattivata")} per {user.Email}",
+            "ApplicationUser",
+            user.Id);
+        Snackbar.Add(enabling ? "2FA attivata." : "2FA disattivata.", Severity.Success);
+        await ReloadAsync();
+    }
+
+    private async Task ToggleActiveAsync(UserRow row)
+    {
+        if (row.IsActive && string.Equals(row.Id, currentUserId, StringComparison.Ordinal))
+        {
+            Snackbar.Add("Non puoi disattivare il tuo stesso account.", Severity.Warning);
+            return;
+        }
+
+        var disabling = row.IsActive;
+        var confirmed = await Dialog.ShowMessageBox(
+            disabling ? "Disattiva utente" : "Attiva utente",
+            disabling
+                ? $"Disattivare {row.Email}? Non potrà più accedere."
+                : $"Riattivare {row.Email}?",
+            yesText: "Conferma", cancelText: "Annulla");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        var user = await UserManager.FindByIdAsync(row.Id);
+        if (user is null)
+        {
+            return;
+        }
+
+        user.IsActive = !disabling;
+        var update = await UserManager.UpdateAsync(user);
+        if (!update.Succeeded)
+        {
+            Snackbar.Add(DescribeErrors(update), Severity.Error);
+            return;
+        }
+
+        await Audit.LogAsync(
+            AuditEventKind.EntityUpdated,
+            $"Utente {(disabling ? "disattivato" : "riattivato")}: {user.Email}",
+            "ApplicationUser",
+            user.Id);
+        Snackbar.Add(disabling ? "Utente disattivato." : "Utente riattivato.", Severity.Success);
+        await ReloadAsync();
+    }
+
+    private static string DescribeErrors(IdentityResult result) =>
+        string.Join(" ", result.Errors.Select(e => e.Description));
+
+    private sealed record UserRow(
+        string Id,
+        string FullName,
+        string Email,
+        bool IsActive,
+        bool TwoFactorEnabled,
+        DateTimeOffset? LastLoginAt,
+        IReadOnlyList<string> Roles);
+}

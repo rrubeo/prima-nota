@@ -10,6 +10,7 @@ using PrimaNota.Infrastructure.Audit;
 using PrimaNota.Infrastructure.BankStatements;
 using PrimaNota.Infrastructure.Clock;
 using PrimaNota.Infrastructure.Configuration;
+using PrimaNota.Infrastructure.Email;
 using PrimaNota.Infrastructure.Esercizi;
 using PrimaNota.Infrastructure.Identity;
 using PrimaNota.Infrastructure.Ocr;
@@ -66,6 +67,10 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(OpenAiOptions.SectionName));
         services.AddHttpClient("OpenAi");
         services.AddScoped<IReceiptAnalyzer, OpenAiReceiptAnalyzer>();
+
+        services.AddOptions<SmtpOptions>()
+            .Bind(configuration.GetSection(SmtpOptions.SectionName));
+        services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
         services.AddHttpContextAccessor();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();

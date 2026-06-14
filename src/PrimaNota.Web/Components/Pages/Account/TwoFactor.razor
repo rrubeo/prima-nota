@@ -1,0 +1,77 @@
+@page "/Account/TwoFactor"
+@layout EmptyLayout
+
+<PageTitle>Verifica accesso · Prima Nota</PageTitle>
+
+<div class="login-shell">
+    <div class="login-card">
+        <h1>Verifica in due passaggi</h1>
+        <p class="subtitle">Abbiamo inviato un codice di accesso alla tua email. Inseriscilo qui sotto.</p>
+
+        @if (!string.IsNullOrEmpty(Error))
+        {
+            <div class="alert alert-error" role="alert">@ErrorMessage(Error)</div>
+        }
+        else if (Info == "resent")
+        {
+            <div class="alert alert-info" role="status">Nuovo codice inviato. Controlla la tua email.</div>
+        }
+
+        <form method="post" action="/Account/TwoFactor" class="login-form">
+            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+            <input type="hidden" name="rememberMe" value="@(RememberMe ? "true" : "false")" />
+
+            <label>
+                <span>Codice di verifica</span>
+                <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code"
+                       autofocus required />
+            </label>
+
+            <button type="submit" class="btn-primary">Verifica e accedi</button>
+        </form>
+
+        <form method="post" action="/Account/TwoFactor/Resend" class="resend-form">
+            <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+            <input type="hidden" name="rememberMe" value="@(RememberMe ? "true" : "false")" />
+            <button type="submit" class="btn-link">Invia di nuovo il codice</button>
+        </form>
+
+        <a class="btn-link back" href="/Account/Login">Torna al login</a>
+    </div>
+</div>
+
+<style>
+    .login-shell { display:flex; align-items:center; justify-content:center; min-height:100vh; background:#f4f6fb; }
+    .login-card { background:#fff; border-radius:12px; box-shadow:0 10px 40px rgba(0,0,0,.08); padding:2.5rem; width:min(420px, 92vw); }
+    .login-card h1 { margin:0 0 .25rem; font-size:1.5rem; }
+    .subtitle { margin:0 0 1.5rem; color:#6b7280; }
+    .login-form label { display:block; margin-bottom:1rem; }
+    .login-form input[type=text] {
+        width:100%; padding:.6rem .75rem; border:1px solid #d1d5db; border-radius:8px; font-size:1.25rem; letter-spacing:.2rem; text-align:center;
+    }
+    .btn-primary { width:100%; padding:.75rem; background:#2563eb; color:#fff; border:0; border-radius:8px; font-weight:600; cursor:pointer; }
+    .btn-primary:hover { background:#1d4ed8; }
+    .resend-form { margin-top:1rem; text-align:center; }
+    .btn-link { background:none; border:0; color:#2563eb; cursor:pointer; text-decoration:underline; font-size:.95rem; }
+    .btn-link.back { display:block; text-align:center; margin-top:.75rem; }
+    .alert-error { background:#fee2e2; color:#991b1b; padding:.75rem; border-radius:8px; margin-bottom:1rem; font-size:.95rem; }
+    .alert-info { background:#dbeafe; color:#1e40af; padding:.75rem; border-radius:8px; margin-bottom:1rem; font-size:.95rem; }
+</style>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery] public bool RememberMe { get; set; }
+
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+
+    [SupplyParameterFromQuery] public string? Info { get; set; }
+
+    private static string ErrorMessage(string code) => code switch
+    {
+        "missing_code" => "Inserisci il codice ricevuto via email.",
+        "invalid_code" => "Codice non valido o scaduto. Riprova o richiedi un nuovo codice.",
+        "lockout" => "Troppi tentativi falliti. L'account è bloccato temporaneamente.",
+        _ => "Si è verificato un errore. Riprova ad accedere.",
+    };
+}

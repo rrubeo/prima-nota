@@ -1,0 +1,91 @@
+@using PrimaNota.Shared.Authorization
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="fullName" Label="Nome completo" Required="true" MaxLength="200" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="email" Label="Email" Required="true" MaxLength="254"
+                              Disabled="@(!IsNew)" InputType="InputType.Email" />
+            </MudItem>
+            @if (IsNew)
+            {
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="password" Label="Password iniziale" Required="true"
+                                  InputType="InputType.Password"
+                                  HelperText="Min 12 caratteri, con maiuscole, minuscole, numeri e simboli." />
+                </MudItem>
+            }
+            <MudItem xs="12">
+                <MudSelect T="string" Label="Ruoli" MultiSelection="true"
+                           @bind-SelectedValues="selectedRoles" MultiSelectionTextFunc="@(s => string.Join(", ", s))">
+                    @foreach (var r in UserRoles.All)
+                    {
+                        <MudSelectItem T="string" Value="@r">@r</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudSwitch T="bool" @bind-Value="isActive" Label="Attivo" Color="Color.Primary" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Annulla</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit">Salva</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public bool IsNew { get; set; }
+
+    [Parameter] public string? UserId { get; set; }
+
+    [Parameter] public string? InitialFullName { get; set; }
+
+    [Parameter] public string? InitialEmail { get; set; }
+
+    [Parameter] public bool InitialIsActive { get; set; } = true;
+
+    [Parameter] public IReadOnlyList<string> InitialRoles { get; set; } = Array.Empty<string>();
+
+    private string? fullName;
+    private string? email;
+    private string? password;
+    private bool isActive = true;
+    private IEnumerable<string> selectedRoles = new HashSet<string>();
+
+    protected override void OnInitialized()
+    {
+        fullName = InitialFullName;
+        email = InitialEmail;
+        isActive = InitialIsActive;
+        selectedRoles = new HashSet<string>(InitialRoles);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        MudDialog.Close(DialogResult.Ok(new UtenteFormResult(
+            UserId,
+            (fullName ?? string.Empty).Trim(),
+            (email ?? string.Empty).Trim(),
+            password,
+            isActive,
+            selectedRoles.ToArray())));
+    }
+
+    /// <summary>Values collected by the dialog; the page applies them via UserManager.</summary>
+    public sealed record UtenteFormResult(
+        string? UserId,
+        string FullName,
+        string Email,
+        string? Password,
+        bool IsActive,
+        IReadOnlyList<string> Roles);
+}

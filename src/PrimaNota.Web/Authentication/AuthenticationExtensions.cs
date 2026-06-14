@@ -43,6 +43,23 @@ internal static class AuthenticationExtensions
         {
             o.Cookie.Name = "PrimaNota.External";
             o.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+        })
+        .AddCookie(IdentityConstants.TwoFactorUserIdScheme, o =>
+        {
+            // Intermediate cookie that carries the user id between the password step and the
+            // email-code verification step. Short-lived and secure.
+            o.Cookie.Name = "PrimaNota.TwoFactorUserId";
+            o.Cookie.HttpOnly = true;
+            o.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            o.Cookie.SameSite = SameSiteMode.Lax;
+            o.ExpireTimeSpan = TimeSpan.FromMinutes(10);
+        })
+        .AddCookie(IdentityConstants.TwoFactorRememberMeScheme, o =>
+        {
+            o.Cookie.Name = "PrimaNota.TwoFactorRememberMe";
+            o.Cookie.HttpOnly = true;
+            o.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            o.Cookie.SameSite = SameSiteMode.Lax;
         });
 
         var googleOptions = configuration

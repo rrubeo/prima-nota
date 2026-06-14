@@ -21,6 +21,8 @@ internal static class AccountEndpoints
         var group = app.MapGroup("/Account").DisableAntiforgery();
 
         group.MapPost("/Login", HandleLoginAsync);
+        group.MapPost("/TwoFactor", HandleTwoFactorAsync);
+        group.MapPost("/TwoFactor/Resend", HandleResendTwoFactorAsync);
         group.MapPost("/Logout", HandleLogoutAsync);
         group.MapPost("/ChangePassword", HandleChangePasswordAsync).RequireAuthorization();
         group.MapGet("/ExternalLogin", HandleExternalChallenge);
@@ -96,7 +98,9 @@ internal static class AccountEndpoints
         [FromForm] string? returnUrl,
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
-        IAuditLogger audit)
+        IEmailSender emailSender,
+        IAuditLogger audit,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
         {
@@ -106,7 +110,10 @@ internal static class AccountEndpoints
         var user = await userManager.FindByEmailAsync(email);
         if (user is null || !user.IsActive)
         {
-            await audit.LogAsync(AuditEventKind.LoginFailed, $"Login failed for {email}: unknown or inactive user");
+            await audit.LogAsync(
+                AuditEventKind.LoginFailed,
+                $"Login failed for {email}: unknown or inactive user",
+                cancellationToken: cancellationToken);
             return Results.Redirect(BuildLoginRedirect(returnUrl, "invalid"));
         }
 
@@ -116,6 +123,13 @@ internal static class AccountEndpoints
             isPersistent: rememberMe ?? false,
             lockoutOnFailure: true);
 
+        if (result.RequiresTwoFactor)
+        {
+            // Password OK: send the email code and route to the verification step.
+            await SendTwoFactorCodeAsync(signInManager, userManager, emailSender, audit, cancellationToken);
+            return Results.Redirect(BuildTwoFactorRedirect(returnUrl, rememberMe ?? false));
+        }
+
         if (!result.Succeeded)
         {
             var reason = ResolveFailureReason(result);
@@ -123,7 +137,8 @@ internal static class AccountEndpoints
                 AuditEventKind.LoginFailed,
                 $"Login failed for {email}: {reason}",
                 targetType: "ApplicationUser",
-                targetId: user.Id);
+                targetId: user.Id,
+                cancellationToken: cancellationToken);
             return Results.Redirect(BuildLoginRedirect(returnUrl, reason));
         }
 
@@ -134,10 +149,123 @@ internal static class AccountEndpoints
             AuditEventKind.LoginSucceeded,
             $"{user.Email} signed in",
             targetType: "ApplicationUser",
+            targetId: user.Id,
+            cancellationToken: cancellationToken);
+
+        return Results.LocalRedirect(SanitizeReturnUrl(returnUrl));
+    }
+
+    private static async Task<IResult> HandleTwoFactorAsync(
+        [FromForm] string code,
+        [FromForm] bool? rememberMe,
+        [FromForm] string? returnUrl,
+        SignInManager<ApplicationUser> signInManager,
+        UserManager<ApplicationUser> userManager,
+        IAuditLogger audit)
+    {
+        var user = await signInManager.GetTwoFactorAuthenticationUserAsync();
+        if (user is null)
+        {
+            return Results.Redirect(BuildLoginRedirect(returnUrl, "twofactor_expired"));
+        }
+
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return Results.Redirect(BuildTwoFactorRedirect(returnUrl, rememberMe ?? false, "missing_code"));
+        }
+
+        var normalized = code.Trim().Replace(" ", string.Empty, StringComparison.Ordinal);
+
+        var result = await signInManager.TwoFactorSignInAsync(
+            TokenOptions.DefaultEmailProvider,
+            normalized,
+            isPersistent: rememberMe ?? false,
+            rememberClient: false);
+
+        if (!result.Succeeded)
+        {
+            var reason = result.IsLockedOut ? "lockout" : "invalid_code";
+            await audit.LogAsync(
+                AuditEventKind.LoginFailed,
+                $"2FA failed for {user.Email}: {reason}",
+                targetType: "ApplicationUser",
+                targetId: user.Id);
+            return Results.Redirect(BuildTwoFactorRedirect(returnUrl, rememberMe ?? false, reason));
+        }
+
+        user.LastLoginAt = DateTimeOffset.UtcNow;
+        await userManager.UpdateAsync(user);
+
+        await audit.LogAsync(
+            AuditEventKind.LoginSucceeded,
+            $"{user.Email} signed in (2FA email)",
+            targetType: "ApplicationUser",
             targetId: user.Id);
 
         return Results.LocalRedirect(SanitizeReturnUrl(returnUrl));
     }
+
+    private static async Task<IResult> HandleResendTwoFactorAsync(
+        [FromForm] bool? rememberMe,
+        [FromForm] string? returnUrl,
+        SignInManager<ApplicationUser> signInManager,
+        UserManager<ApplicationUser> userManager,
+        IEmailSender emailSender,
+        IAuditLogger audit,
+        CancellationToken cancellationToken)
+    {
+        var user = await signInManager.GetTwoFactorAuthenticationUserAsync();
+        if (user is null)
+        {
+            return Results.Redirect(BuildLoginRedirect(returnUrl, "twofactor_expired"));
+        }
+
+        await SendTwoFactorCodeAsync(signInManager, userManager, emailSender, audit, cancellationToken);
+        return Results.Redirect(BuildTwoFactorRedirect(returnUrl, rememberMe ?? false, "resent"));
+    }
+
+    private static async Task SendTwoFactorCodeAsync(
+        SignInManager<ApplicationUser> signInManager,
+        UserManager<ApplicationUser> userManager,
+        IEmailSender emailSender,
+        IAuditLogger audit,
+        CancellationToken cancellationToken)
+    {
+        var user = await signInManager.GetTwoFactorAuthenticationUserAsync();
+        if (user is null || string.IsNullOrWhiteSpace(user.Email))
+        {
+            return;
+        }
+
+        var code = await userManager.GenerateTwoFactorTokenAsync(user, TokenOptions.DefaultEmailProvider);
+
+        try
+        {
+            await emailSender.SendAsync(
+                user.Email,
+                "Codice di accesso · Prima Nota",
+                BuildTwoFactorEmailBody(code),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Surface a clear audit entry; the user can use "resend" once SMTP is fixed.
+            await audit.LogAsync(
+                AuditEventKind.LoginFailed,
+                $"2FA code email failed for {user.Email}: {ex.Message}",
+                targetType: "ApplicationUser",
+                targetId: user.Id,
+                cancellationToken: cancellationToken);
+        }
+    }
+
+    private static string BuildTwoFactorEmailBody(string code) =>
+        $"""
+        <p>Ciao,</p>
+        <p>il tuo codice di accesso a Prima Nota è:</p>
+        <p style="font-size:1.6rem;font-weight:700;letter-spacing:.2rem">{code}</p>
+        <p>Il codice è valido per pochi minuti. Se non hai richiesto l'accesso, ignora questa email.</p>
+        """;
 
     private static async Task<IResult> HandleLogoutAsync(
         SignInManager<ApplicationUser> signInManager,
@@ -243,6 +371,13 @@ internal static class AccountEndpoints
     {
         var safe = SanitizeReturnUrl(returnUrl);
         return $"/Account/Login?error={error}&returnUrl={Uri.EscapeDataString(safe)}";
+    }
+
+    private static string BuildTwoFactorRedirect(string? returnUrl, bool rememberMe, string? info = null)
+    {
+        var safe = SanitizeReturnUrl(returnUrl);
+        var url = $"/Account/TwoFactor?returnUrl={Uri.EscapeDataString(safe)}&rememberMe={(rememberMe ? "true" : "false")}";
+        return info is null ? url : $"{url}&info={info}";
     }
 
     private static string SanitizeReturnUrl(string? url)

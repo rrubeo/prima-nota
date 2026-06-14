@@ -59,6 +59,10 @@
     <PackageVersion Include="ClosedXML" Version="0.105.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Email">
+    <PackageVersion Include="MailKit" Version="4.17.0" />
+  </ItemGroup>
+
   <ItemGroup Label="ApplicationLayer">
     <PackageVersion Include="MediatR" Version="12.4.1" />
     <PackageVersion Include="FluentValidation" Version="11.11.0" />
